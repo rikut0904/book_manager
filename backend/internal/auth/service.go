@@ -36,6 +36,23 @@ func NewService(users repository.UserRepository) *Service {
 	}
 }
 
+func (s *Service) SeedUser(id, email, username, password string) error {
+	hashed, err := hashPassword(password)
+	if err != nil {
+		return err
+	}
+	user := domain.User{
+		ID:           id,
+		Email:        email,
+		Username:     username,
+		PasswordHash: hashed,
+	}
+	if err := s.users.Create(user); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (s *Service) Signup(email, password, username string) (AuthResult, error) {
 	hashed, err := hashPassword(password)
 	if err != nil {

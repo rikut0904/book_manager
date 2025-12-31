@@ -12,11 +12,13 @@ import (
 	"book_manager/backend/internal/auth"
 	"book_manager/backend/internal/books"
 	"book_manager/backend/internal/config"
+	"book_manager/backend/internal/follows"
 	"book_manager/backend/internal/handler"
 	"book_manager/backend/internal/isbn"
 	"book_manager/backend/internal/repository"
 	"book_manager/backend/internal/router"
 	"book_manager/backend/internal/userbooks"
+	"book_manager/backend/internal/users"
 )
 
 func main() {
@@ -24,11 +26,15 @@ func main() {
 	userRepo := repository.NewMemoryUserRepository()
 	bookRepo := repository.NewMemoryBookRepository()
 	userBookRepo := repository.NewMemoryUserBookRepository()
+	profileRepo := repository.NewMemoryProfileSettingsRepository()
 	authService := auth.NewService(userRepo)
 	isbnService := isbn.NewService(cfg.GoogleBooksBaseURL, cfg.GoogleBooksAPIKey)
 	bookService := books.NewService(bookRepo)
 	userBookService := userbooks.NewService(userBookRepo)
-	h := handler.New(authService, isbnService, bookService, userBookService)
+	usersService := users.NewService(userRepo, profileRepo)
+	followsService := follows.NewService()
+	_ = authService.SeedUser("user_demo", "demo@book.local", "demo", "password")
+	h := handler.New(authService, isbnService, bookService, userBookService, usersService, followsService)
 	r := router.New(h)
 
 	server := &http.Server{

@@ -10,6 +10,7 @@ go run ./cmd/api
 - ISBN lookup: Google Books API 連携
 - 書誌マスタ（/books）: インメモリ実装
 - 所蔵（/user-books）: インメモリ実装
+- Users/Follows: インメモリ実装
 - そのほか: echo 返却
 
 ## 環境変数

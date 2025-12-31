@@ -9,8 +9,10 @@ import (
 	"book_manager/backend/internal/auth"
 	"book_manager/backend/internal/books"
 	"book_manager/backend/internal/domain"
+	"book_manager/backend/internal/follows"
 	"book_manager/backend/internal/isbn"
 	"book_manager/backend/internal/userbooks"
+	"book_manager/backend/internal/users"
 )
 
 type Handler struct {
@@ -18,6 +20,8 @@ type Handler struct {
 	isbn      *isbn.Service
 	books     *books.Service
 	userBooks *userbooks.Service
+	users     *users.Service
+	follows   *follows.Service
 }
 
 func New(
@@ -25,12 +29,16 @@ func New(
 	isbnService *isbn.Service,
 	bookService *books.Service,
 	userBookService *userbooks.Service,
+	usersService *users.Service,
+	followsService *follows.Service,
 ) *Handler {
 	return &Handler{
 		auth:      authService,
 		isbn:      isbnService,
 		books:     bookService,
 		userBooks: userBookService,
+		users:     usersService,
+		follows:   followsService,
 	}
 }
 
@@ -477,7 +485,19 @@ func (h *Handler) Users(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w, http.MethodGet)
 		return
 	}
-	echoRequest(w, r)
+	query := r.URL.Query().Get("query")
+	items := h.users.List(query)
+	result := make([]map[string]string, 0, len(items))
+	for _, user := range items {
+		result = append(result, map[string]string{
+			"id":       user.ID,
+			"email":    user.Email,
+			"username": user.Username,
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"items": result,
+	})
 }
 
 func (h *Handler) UsersByID(w http.ResponseWriter, r *http.Request) {
@@ -489,15 +509,67 @@ func (h *Handler) UsersByID(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w, http.MethodGet)
 		return
 	}
-	echoRequest(w, r)
+	userID, _ := pathID("/users/", r.URL.Path)
+	user, ok := h.users.Get(userID)
+	if !ok {
+		notFound(w)
+		return
+	}
+	settings := h.users.GetSettings(userID)
+	ownedCount := len(h.userBooks.ListByUser(userID))
+	writeJSON(w, http.StatusOK, map[string]any{
+		"user": map[string]string{
+			"id":       user.ID,
+			"email":    user.Email,
+			"username": user.Username,
+		},
+		"settings": map[string]string{
+			"visibility": settings.Visibility,
+		},
+		"stats": map[string]int{
+			"ownedCount":  ownedCount,
+			"seriesCount": 0,
+			"followers":   h.follows.CountFollowers(userID),
+			"following":   h.follows.CountFollowing(userID),
+		},
+		"recommendations": []string{},
+	})
 }
 
 func (h *Handler) UsersMe(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPatch:
-		echoRequest(w, r)
+		var req struct {
+			Username string `json:"username"`
+		}
+		if err := decodeJSON(r, &req); err != nil {
+			badRequest(w, "invalid json")
+			return
+		}
+		if strings.TrimSpace(req.Username) == "" {
+			badRequest(w, "username is required")
+			return
+		}
+		userID := userIDFromRequest(r)
+		user, ok := h.users.UpdateUsername(userID, req.Username)
+		if !ok {
+			notFound(w)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"user": map[string]string{
+				"id":       user.ID,
+				"email":    user.Email,
+				"username": user.Username,
+			},
+		})
 	case http.MethodDelete:
-		echoRequest(w, r)
+		userID := userIDFromRequest(r)
+		if !h.users.Delete(userID) {
+			notFound(w)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	default:
 		methodNotAllowed(w, http.MethodPatch, http.MethodDelete)
 	}
@@ -508,7 +580,32 @@ func (h *Handler) UsersMeSettings(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w, http.MethodPatch)
 		return
 	}
-	echoRequest(w, r)
+	var req struct {
+		Visibility string `json:"visibility"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		badRequest(w, "invalid json")
+		return
+	}
+	if strings.TrimSpace(req.Visibility) == "" {
+		badRequest(w, "visibility is required")
+		return
+	}
+	userID := userIDFromRequest(r)
+	settings, err := h.users.UpdateSettings(userID, req.Visibility)
+	if err != nil {
+		if errors.Is(err, users.ErrInvalidVisibility) {
+			badRequest(w, "visibility must be public or followers")
+			return
+		}
+		internalError(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"settings": map[string]string{
+			"visibility": settings.Visibility,
+		},
+	})
 }
 
 func (h *Handler) Follows(w http.ResponseWriter, r *http.Request) {
@@ -518,9 +615,15 @@ func (h *Handler) Follows(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodPost:
-		echoRequest(w, r)
+		followeeID, _ := pathID("/follows/", r.URL.Path)
+		followerID := userIDFromRequest(r)
+		h.follows.Follow(followerID, followeeID)
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	case http.MethodDelete:
-		echoRequest(w, r)
+		followeeID, _ := pathID("/follows/", r.URL.Path)
+		followerID := userIDFromRequest(r)
+		h.follows.Unfollow(followerID, followeeID)
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	default:
 		methodNotAllowed(w, http.MethodPost, http.MethodDelete)
 	}
@@ -543,6 +646,16 @@ func pathID(prefix, path string) (string, bool) {
 		return "", false
 	}
 	return id, true
+}
+
+func userIDFromRequest(r *http.Request) string {
+	if value := strings.TrimSpace(r.Header.Get("X-User-Id")); value != "" {
+		return value
+	}
+	if value := strings.TrimSpace(r.URL.Query().Get("userId")); value != "" {
+		return value
+	}
+	return "user_demo"
 }
 
 func validateBookRequest(req bookRequest) (string, error) {
