@@ -7,6 +7,7 @@ type Config struct {
 	Env                string
 	GoogleBooksAPIKey  string
 	GoogleBooksBaseURL string
+	BookReportTo       string
 }
 
 func Load() Config {
@@ -15,6 +16,7 @@ func Load() Config {
 		Env:                getEnv("APP_ENV", "local"),
 		GoogleBooksAPIKey:  getEnv("GOOGLE_BOOKS_API_KEY", ""),
 		GoogleBooksBaseURL: getEnv("GOOGLE_BOOKS_BASE_URL", "https://www.googleapis.com/books/v1/volumes"),
+		BookReportTo:       getEnv("BOOK_REPORT_TO", "product@rikut0904.site"),
 	}
 }
 

@@ -44,6 +44,10 @@ func (s *Service) Get(id string) (domain.Book, bool) {
 	return s.books.FindByID(id)
 }
 
+func (s *Service) FindByISBN(isbn string) (domain.Book, bool) {
+	return s.books.FindByISBN(isbn)
+}
+
 func newID() string {
 	seed := make([]byte, 16)
 	if _, err := rand.Read(seed); err != nil {

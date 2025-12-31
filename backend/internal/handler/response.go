@@ -28,6 +28,13 @@ func notFound(w http.ResponseWriter) {
 	})
 }
 
+func notFoundWithMessage(w http.ResponseWriter, message string) {
+	writeJSON(w, http.StatusNotFound, map[string]string{
+		"error":   "not found",
+		"message": message,
+	})
+}
+
 func badRequest(w http.ResponseWriter, message string) {
 	writeJSON(w, http.StatusBadRequest, map[string]string{
 		"error":   "bad request",

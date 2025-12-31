@@ -11,7 +11,17 @@ go run ./cmd/api
 - 書誌マスタ（/books）: インメモリ実装
 - 所蔵（/user-books）: インメモリ実装
 - Users/Follows: インメモリ実装
+- Favorites/Next-to-buy/Tags/Recommendations: インメモリ実装
 - そのほか: echo 返却
+
+## ISBN lookup の挙動
+- `/isbn/lookup` は取得した書誌を `/books` に自動登録します
+
+## シリーズ上書き
+- `/user-series/override` は既存の user-book を探して seriesId と volumeNumber を更新します
+
+## 書誌報告
+- `/book-reports` はメール送信の代わりにログ出力します
 
 ## 環境変数
 - `PORT`: APIのポート（default: 8080）

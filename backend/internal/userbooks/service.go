@@ -16,8 +16,10 @@ type Service struct {
 }
 
 type UpdateInput struct {
-	Note       *string
-	AcquiredAt *string
+	Note         *string
+	AcquiredAt   *string
+	SeriesID     *string
+	VolumeNumber *int
 }
 
 func NewService(repo repository.UserBookRepository) *Service {
@@ -57,6 +59,12 @@ func (s *Service) Update(id string, input UpdateInput) (domain.UserBook, bool) {
 	}
 	if input.AcquiredAt != nil {
 		userBook.AcquiredAt = *input.AcquiredAt
+	}
+	if input.SeriesID != nil {
+		userBook.SeriesID = *input.SeriesID
+	}
+	if input.VolumeNumber != nil {
+		userBook.VolumeNumber = *input.VolumeNumber
 	}
 	if !s.repo.Update(userBook) {
 		return domain.UserBook{}, false

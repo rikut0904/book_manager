@@ -12,11 +12,16 @@ import (
 	"book_manager/backend/internal/auth"
 	"book_manager/backend/internal/books"
 	"book_manager/backend/internal/config"
+	"book_manager/backend/internal/favorites"
 	"book_manager/backend/internal/follows"
 	"book_manager/backend/internal/handler"
 	"book_manager/backend/internal/isbn"
+	"book_manager/backend/internal/nexttobuy"
+	"book_manager/backend/internal/recommendations"
+	"book_manager/backend/internal/reports"
 	"book_manager/backend/internal/repository"
 	"book_manager/backend/internal/router"
+	"book_manager/backend/internal/tags"
 	"book_manager/backend/internal/userbooks"
 	"book_manager/backend/internal/users"
 )
@@ -27,14 +32,36 @@ func main() {
 	bookRepo := repository.NewMemoryBookRepository()
 	userBookRepo := repository.NewMemoryUserBookRepository()
 	profileRepo := repository.NewMemoryProfileSettingsRepository()
+	favoriteRepo := repository.NewMemoryFavoriteRepository()
+	nextToBuyRepo := repository.NewMemoryNextToBuyRepository()
+	tagRepo := repository.NewMemoryTagRepository()
+	bookTagRepo := repository.NewMemoryBookTagRepository()
+	recommendationRepo := repository.NewMemoryRecommendationRepository()
 	authService := auth.NewService(userRepo)
 	isbnService := isbn.NewService(cfg.GoogleBooksBaseURL, cfg.GoogleBooksAPIKey)
 	bookService := books.NewService(bookRepo)
 	userBookService := userbooks.NewService(userBookRepo)
 	usersService := users.NewService(userRepo, profileRepo)
 	followsService := follows.NewService()
+	favoritesService := favorites.NewService(favoriteRepo)
+	nextToBuyService := nexttobuy.NewService(nextToBuyRepo)
+	tagsService := tags.NewService(tagRepo, bookTagRepo)
+	recsService := recommendations.NewService(recommendationRepo)
+	reportsService := reports.NewService(cfg.BookReportTo)
 	_ = authService.SeedUser("user_demo", "demo@book.local", "demo", "password")
-	h := handler.New(authService, isbnService, bookService, userBookService, usersService, followsService)
+	h := handler.New(
+		authService,
+		isbnService,
+		bookService,
+		userBookService,
+		usersService,
+		followsService,
+		favoritesService,
+		nextToBuyService,
+		tagsService,
+		recsService,
+		reportsService,
+	)
 	r := router.New(h)
 
 	server := &http.Server{

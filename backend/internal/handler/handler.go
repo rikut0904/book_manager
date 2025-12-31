@@ -9,8 +9,13 @@ import (
 	"book_manager/backend/internal/auth"
 	"book_manager/backend/internal/books"
 	"book_manager/backend/internal/domain"
+	"book_manager/backend/internal/favorites"
 	"book_manager/backend/internal/follows"
 	"book_manager/backend/internal/isbn"
+	"book_manager/backend/internal/nexttobuy"
+	"book_manager/backend/internal/recommendations"
+	"book_manager/backend/internal/reports"
+	"book_manager/backend/internal/tags"
 	"book_manager/backend/internal/userbooks"
 	"book_manager/backend/internal/users"
 )
@@ -22,6 +27,11 @@ type Handler struct {
 	userBooks *userbooks.Service
 	users     *users.Service
 	follows   *follows.Service
+	favorites *favorites.Service
+	nextToBuy *nexttobuy.Service
+	tags      *tags.Service
+	recs      *recommendations.Service
+	reports   *reports.Service
 }
 
 func New(
@@ -31,6 +41,11 @@ func New(
 	userBookService *userbooks.Service,
 	usersService *users.Service,
 	followsService *follows.Service,
+	favoritesService *favorites.Service,
+	nextToBuyService *nexttobuy.Service,
+	tagsService *tags.Service,
+	recsService *recommendations.Service,
+	reportsService *reports.Service,
 ) *Handler {
 	return &Handler{
 		auth:      authService,
@@ -39,6 +54,11 @@ func New(
 		userBooks: userBookService,
 		users:     usersService,
 		follows:   followsService,
+		favorites: favoritesService,
+		nextToBuy: nextToBuyService,
+		tags:      tagsService,
+		recs:      recsService,
+		reports:   reportsService,
 	}
 }
 
@@ -184,6 +204,20 @@ func (h *Handler) IsbnLookup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	isbnValue := r.URL.Query().Get("isbn")
+	if book, ok := h.books.FindByISBN(isbnValue); ok {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"id":            book.ID,
+			"isbn13":        book.ISBN13,
+			"title":         book.Title,
+			"authors":       book.Authors,
+			"publisher":     book.Publisher,
+			"publishedDate": book.PublishedDate,
+			"thumbnailUrl":  book.ThumbnailURL,
+			"source":        book.Source,
+		})
+		return
+	}
+
 	book, err := h.isbn.Lookup(isbnValue)
 	if err != nil {
 		if errors.Is(err, isbn.ErrNotFound) {
@@ -193,14 +227,29 @@ func (h *Handler) IsbnLookup(w http.ResponseWriter, r *http.Request) {
 		internalError(w)
 		return
 	}
+	created, err := h.books.Create(book)
+	if err != nil {
+		if errors.Is(err, books.ErrBookExists) {
+			if existing, ok := h.books.FindByISBN(isbnValue); ok {
+				created = existing
+			} else {
+				internalError(w)
+				return
+			}
+		} else {
+			internalError(w)
+			return
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"isbn13":        book.ISBN13,
-		"title":         book.Title,
-		"authors":       book.Authors,
-		"publisher":     book.Publisher,
-		"publishedDate": book.PublishedDate,
-		"thumbnailUrl":  book.ThumbnailURL,
-		"source":        book.Source,
+		"id":            created.ID,
+		"isbn13":        created.ISBN13,
+		"title":         created.Title,
+		"authors":       created.Authors,
+		"publisher":     created.Publisher,
+		"publishedDate": created.PublishedDate,
+		"thumbnailUrl":  created.ThumbnailURL,
+		"source":        created.Source,
 	})
 }
 
@@ -366,15 +415,91 @@ func (h *Handler) UserSeriesOverride(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w, http.MethodPatch)
 		return
 	}
-	echoRequest(w, r)
+	var req struct {
+		BookID       string `json:"bookId"`
+		SeriesID     string `json:"seriesId"`
+		VolumeNumber *int   `json:"volumeNumber"`
+		UserID       string `json:"userId"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		badRequest(w, "invalid json")
+		return
+	}
+	if strings.TrimSpace(req.BookID) == "" || strings.TrimSpace(req.SeriesID) == "" {
+		badRequest(w, "bookId and seriesId are required")
+		return
+	}
+	if req.VolumeNumber == nil {
+		badRequest(w, "volumeNumber is required")
+		return
+	}
+	userID := strings.TrimSpace(req.UserID)
+	if userID == "" {
+		userID = userIDFromRequest(r)
+	}
+	items := h.userBooks.ListByUser(userID)
+	for _, item := range items {
+		if item.BookID != req.BookID {
+			continue
+		}
+		seriesID := req.SeriesID
+		volume := *req.VolumeNumber
+		updated, ok := h.userBooks.Update(item.ID, userbooks.UpdateInput{
+			SeriesID:     &seriesID,
+			VolumeNumber: &volume,
+		})
+		if !ok {
+			internalError(w)
+			return
+		}
+		writeJSON(w, http.StatusOK, updated)
+		return
+	}
+	notFound(w)
 }
 
 func (h *Handler) Favorites(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		echoRequest(w, r)
+		userID := userIDFromRequest(r)
+		items := h.favorites.ListByUser(userID)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"items": items,
+		})
 	case http.MethodPost:
-		echoRequest(w, r)
+		var req struct {
+			Type     string `json:"type"`
+			BookID   string `json:"bookId"`
+			SeriesID string `json:"seriesId"`
+		}
+		if err := decodeJSON(r, &req); err != nil {
+			badRequest(w, "invalid json")
+			return
+		}
+		favoriteType := strings.TrimSpace(req.Type)
+		if favoriteType != "book" && favoriteType != "series" {
+			badRequest(w, "type must be book or series")
+			return
+		}
+		if favoriteType == "book" && strings.TrimSpace(req.BookID) == "" {
+			badRequest(w, "bookId is required")
+			return
+		}
+		if favoriteType == "series" && strings.TrimSpace(req.SeriesID) == "" {
+			badRequest(w, "seriesId is required")
+			return
+		}
+		userID := userIDFromRequest(r)
+		item, err := h.favorites.Create(userID, favoriteType, req.BookID, req.SeriesID)
+		if err != nil {
+			if errors.Is(err, favorites.ErrFavoriteExists) {
+				conflict(w, "favorite already exists")
+				return
+			}
+			internalError(w)
+			return
+		}
+		writeJSON(w, http.StatusOK, item)
 	default:
 		methodNotAllowed(w, http.MethodGet, http.MethodPost)
 	}
@@ -389,7 +514,12 @@ func (h *Handler) FavoritesByID(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w, http.MethodDelete)
 		return
 	}
-	echoRequest(w, r)
+	id, _ := pathID("/favorites/", r.URL.Path)
+	if !h.favorites.Delete(id) {
+		notFound(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 func (h *Handler) NextToBuy(w http.ResponseWriter, r *http.Request) {
@@ -397,7 +527,11 @@ func (h *Handler) NextToBuy(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w, http.MethodGet)
 		return
 	}
-	echoRequest(w, r)
+	userID := userIDFromRequest(r)
+	items := h.nextToBuy.ListByUser(userID)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"items": items,
+	})
 }
 
 func (h *Handler) NextToBuyManual(w http.ResponseWriter, r *http.Request) {
@@ -405,7 +539,31 @@ func (h *Handler) NextToBuyManual(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w, http.MethodPost)
 		return
 	}
-	echoRequest(w, r)
+	var req struct {
+		Title        string `json:"title"`
+		SeriesName   string `json:"seriesName"`
+		VolumeNumber *int   `json:"volumeNumber"`
+		Note         string `json:"note"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		badRequest(w, "invalid json")
+		return
+	}
+	if strings.TrimSpace(req.Title) == "" {
+		badRequest(w, "title is required")
+		return
+	}
+	userID := userIDFromRequest(r)
+	volume := 0
+	if req.VolumeNumber != nil {
+		volume = *req.VolumeNumber
+	}
+	item, err := h.nextToBuy.Create(userID, req.Title, req.SeriesName, volume, req.Note)
+	if err != nil {
+		internalError(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
 }
 
 func (h *Handler) NextToBuyManualByID(w http.ResponseWriter, r *http.Request) {
@@ -415,9 +573,47 @@ func (h *Handler) NextToBuyManualByID(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodPatch:
-		echoRequest(w, r)
+		id, ok := pathID("/next-to-buy/manual/", r.URL.Path)
+		if !ok {
+			notFound(w)
+			return
+		}
+		var req struct {
+			Title        *string `json:"title"`
+			SeriesName   *string `json:"seriesName"`
+			VolumeNumber *int    `json:"volumeNumber"`
+			Note         *string `json:"note"`
+		}
+		if err := decodeJSON(r, &req); err != nil {
+			badRequest(w, "invalid json")
+			return
+		}
+		if req.Title == nil && req.SeriesName == nil && req.VolumeNumber == nil && req.Note == nil {
+			badRequest(w, "no fields to update")
+			return
+		}
+		item, ok := h.nextToBuy.Update(id, nexttobuy.UpdateInput{
+			Title:        req.Title,
+			SeriesName:   req.SeriesName,
+			VolumeNumber: req.VolumeNumber,
+			Note:         req.Note,
+		})
+		if !ok {
+			notFound(w)
+			return
+		}
+		writeJSON(w, http.StatusOK, item)
 	case http.MethodDelete:
-		echoRequest(w, r)
+		id, ok := pathID("/next-to-buy/manual/", r.URL.Path)
+		if !ok {
+			notFound(w)
+			return
+		}
+		if !h.nextToBuy.Delete(id) {
+			notFound(w)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	default:
 		methodNotAllowed(w, http.MethodPatch, http.MethodDelete)
 	}
@@ -426,9 +622,34 @@ func (h *Handler) NextToBuyManualByID(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Tags(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		echoRequest(w, r)
+		userID := userIDFromRequest(r)
+		items := h.tags.ListByUser(userID)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"items": items,
+		})
 	case http.MethodPost:
-		echoRequest(w, r)
+		var req struct {
+			Name string `json:"name"`
+		}
+		if err := decodeJSON(r, &req); err != nil {
+			badRequest(w, "invalid json")
+			return
+		}
+		if strings.TrimSpace(req.Name) == "" {
+			badRequest(w, "name is required")
+			return
+		}
+		userID := userIDFromRequest(r)
+		tag, err := h.tags.Create(userID, req.Name)
+		if err != nil {
+			if errors.Is(err, tags.ErrTagExists) {
+				conflict(w, "tag already exists")
+				return
+			}
+			internalError(w)
+			return
+		}
+		writeJSON(w, http.StatusOK, tag)
 	default:
 		methodNotAllowed(w, http.MethodGet, http.MethodPost)
 	}
@@ -443,15 +664,71 @@ func (h *Handler) TagsByID(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w, http.MethodDelete)
 		return
 	}
-	echoRequest(w, r)
+	id, _ := pathID("/tags/", r.URL.Path)
+	if !h.tags.Delete(id) {
+		notFound(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 func (h *Handler) BookTags(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
-		echoRequest(w, r)
+		var req struct {
+			BookID string `json:"bookId"`
+			TagID  string `json:"tagId"`
+			UserID string `json:"userId"`
+		}
+		if err := decodeJSON(r, &req); err != nil {
+			badRequest(w, "invalid json")
+			return
+		}
+		if strings.TrimSpace(req.BookID) == "" || strings.TrimSpace(req.TagID) == "" {
+			badRequest(w, "bookId and tagId are required")
+			return
+		}
+		userID := strings.TrimSpace(req.UserID)
+		if userID == "" {
+			userID = userIDFromRequest(r)
+		}
+		item, err := h.tags.AddBookTag(userID, req.BookID, req.TagID)
+		if err != nil {
+			if errors.Is(err, tags.ErrTagNotFound) {
+				notFound(w)
+				return
+			}
+			if errors.Is(err, tags.ErrBookTagExists) {
+				conflict(w, "book tag already exists")
+				return
+			}
+			internalError(w)
+			return
+		}
+		writeJSON(w, http.StatusOK, item)
 	case http.MethodDelete:
-		echoRequest(w, r)
+		var req struct {
+			BookID string `json:"bookId"`
+			TagID  string `json:"tagId"`
+			UserID string `json:"userId"`
+		}
+		if err := decodeJSON(r, &req); err != nil {
+			badRequest(w, "invalid json")
+			return
+		}
+		if strings.TrimSpace(req.BookID) == "" || strings.TrimSpace(req.TagID) == "" {
+			badRequest(w, "bookId and tagId are required")
+			return
+		}
+		userID := strings.TrimSpace(req.UserID)
+		if userID == "" {
+			userID = userIDFromRequest(r)
+		}
+		if !h.tags.RemoveBookTag(userID, req.BookID, req.TagID) {
+			notFound(w)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	default:
 		methodNotAllowed(w, http.MethodPost, http.MethodDelete)
 	}
@@ -460,9 +737,30 @@ func (h *Handler) BookTags(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Recommendations(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		echoRequest(w, r)
+		items := h.recs.List()
+		writeJSON(w, http.StatusOK, map[string]any{
+			"items": items,
+		})
 	case http.MethodPost:
-		echoRequest(w, r)
+		var req struct {
+			BookID  string `json:"bookId"`
+			Comment string `json:"comment"`
+		}
+		if err := decodeJSON(r, &req); err != nil {
+			badRequest(w, "invalid json")
+			return
+		}
+		if strings.TrimSpace(req.BookID) == "" {
+			badRequest(w, "bookId is required")
+			return
+		}
+		userID := userIDFromRequest(r)
+		item, err := h.recs.Create(userID, req.BookID, req.Comment)
+		if err != nil {
+			internalError(w)
+			return
+		}
+		writeJSON(w, http.StatusOK, item)
 	default:
 		methodNotAllowed(w, http.MethodGet, http.MethodPost)
 	}
@@ -477,7 +775,12 @@ func (h *Handler) RecommendationsByID(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w, http.MethodDelete)
 		return
 	}
-	echoRequest(w, r)
+	id, _ := pathID("/recommendations/", r.URL.Path)
+	if !h.recs.Delete(id) {
+		notFound(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 func (h *Handler) Users(w http.ResponseWriter, r *http.Request) {
@@ -634,7 +937,31 @@ func (h *Handler) BookReports(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w, http.MethodPost)
 		return
 	}
-	echoRequest(w, r)
+	var req struct {
+		BookID     string `json:"bookId"`
+		Suggestion string `json:"suggestion"`
+		Note       string `json:"note"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		badRequest(w, "invalid json")
+		return
+	}
+	if strings.TrimSpace(req.BookID) == "" || strings.TrimSpace(req.Suggestion) == "" {
+		badRequest(w, "bookId and suggestion are required")
+		return
+	}
+	book, ok := h.books.Get(req.BookID)
+	if !ok {
+		notFoundWithMessage(w, "book not found")
+		return
+	}
+	h.reports.SendBookReport(reports.BookReport{
+		BookID:     req.BookID,
+		Suggestion: req.Suggestion,
+		Note:       req.Note,
+		Book:       book,
+	})
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 func pathID(prefix, path string) (string, bool) {
