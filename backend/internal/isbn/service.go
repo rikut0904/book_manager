@@ -1,7 +1,14 @@
 package isbn
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"sync"
+	"time"
 
 	"book_manager/backend/internal/domain"
 )
@@ -9,29 +16,132 @@ import (
 var ErrNotFound = errors.New("book not found")
 
 type Service struct {
-	books map[string]domain.Book
+	client  *http.Client
+	baseURL string
+	apiKey  string
+	mu      sync.RWMutex
+	cache   map[string]domain.Book
 }
 
-func NewService() *Service {
+func NewService(baseURL, apiKey string) *Service {
 	return &Service{
-		books: map[string]domain.Book{
-			"9780000000000": {
-				ID:            "book_demo_1",
-				ISBN13:        "9780000000000",
-				Title:         "サンプル書籍",
-				Authors:       []string{"著者A"},
-				Publisher:     "Book Manager Press",
-				PublishedDate: "2024-01-01",
-				ThumbnailURL:  "",
-				Source:        "manual",
-			},
+		client: &http.Client{
+			Timeout: 8 * time.Second,
 		},
+		baseURL: baseURL,
+		apiKey:  apiKey,
+		cache:   make(map[string]domain.Book),
 	}
 }
 
 func (s *Service) Lookup(isbn string) (domain.Book, error) {
-	if book, ok := s.books[isbn]; ok {
+	if book, ok := s.fromCache(isbn); ok {
 		return book, nil
 	}
-	return domain.Book{}, ErrNotFound
+
+	book, err := s.fetchGoogleBooks(isbn)
+	if err != nil {
+		return domain.Book{}, err
+	}
+	s.storeCache(isbn, book)
+	return book, nil
+}
+
+func (s *Service) fromCache(isbn string) (domain.Book, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	book, ok := s.cache[isbn]
+	return book, ok
+}
+
+func (s *Service) storeCache(isbn string, book domain.Book) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cache[isbn] = book
+}
+
+func (s *Service) fetchGoogleBooks(isbn string) (domain.Book, error) {
+	query := url.Values{}
+	query.Set("q", fmt.Sprintf("isbn:%s", isbn))
+	if s.apiKey != "" {
+		query.Set("key", s.apiKey)
+	}
+
+	requestURL := fmt.Sprintf("%s?%s", s.baseURL, query.Encode())
+	req, err := http.NewRequest(http.MethodGet, requestURL, nil)
+	if err != nil {
+		return domain.Book{}, err
+	}
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return domain.Book{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return domain.Book{}, fmt.Errorf("google books status: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return domain.Book{}, err
+	}
+
+	var payload googleBooksResponse
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return domain.Book{}, err
+	}
+	if len(payload.Items) == 0 {
+		return domain.Book{}, ErrNotFound
+	}
+
+	item := payload.Items[0]
+	book := domain.Book{
+		ID:            item.ID,
+		ISBN13:        extractISBN13(item.VolumeInfo.IndustryIdentifiers, isbn),
+		Title:         item.VolumeInfo.Title,
+		Authors:       item.VolumeInfo.Authors,
+		Publisher:     item.VolumeInfo.Publisher,
+		PublishedDate: item.VolumeInfo.PublishedDate,
+		ThumbnailURL:  item.VolumeInfo.ImageLinks.Thumbnail,
+		Source:        "google",
+	}
+	return book, nil
+}
+
+func extractISBN13(identifiers []industryIdentifier, fallback string) string {
+	for _, id := range identifiers {
+		if id.Type == "ISBN_13" && id.Identifier != "" {
+			return id.Identifier
+		}
+	}
+	return fallback
+}
+
+type googleBooksResponse struct {
+	Items []googleBooksItem `json:"items"`
+}
+
+type googleBooksItem struct {
+	ID         string             `json:"id"`
+	VolumeInfo googleBooksVolume  `json:"volumeInfo"`
+}
+
+type googleBooksVolume struct {
+	Title               string                `json:"title"`
+	Authors             []string              `json:"authors"`
+	Publisher           string                `json:"publisher"`
+	PublishedDate       string                `json:"publishedDate"`
+	IndustryIdentifiers []industryIdentifier  `json:"industryIdentifiers"`
+	ImageLinks          googleBooksImageLinks `json:"imageLinks"`
+}
+
+type industryIdentifier struct {
+	Type       string `json:"type"`
+	Identifier string `json:"identifier"`
+}
+
+type googleBooksImageLinks struct {
+	Thumbnail string `json:"thumbnail"`
 }

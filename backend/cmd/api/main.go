@@ -21,7 +21,7 @@ func main() {
 	cfg := config.Load()
 	userRepo := repository.NewMemoryUserRepository()
 	authService := auth.NewService(userRepo)
-	isbnService := isbn.NewService()
+	isbnService := isbn.NewService(cfg.GoogleBooksBaseURL, cfg.GoogleBooksAPIKey)
 	h := handler.New(authService, isbnService)
 	r := router.New(h)
 
