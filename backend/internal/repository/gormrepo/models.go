@@ -75,3 +75,9 @@ type Recommendation struct {
 	Comment   string
 	CreatedAt time.Time
 }
+
+type IsbnCache struct {
+	ISBN13    string         `gorm:"primaryKey"`
+	Payload   datatypes.JSON `gorm:"type:jsonb"`
+	FetchedAt time.Time      `gorm:"index"`
+}

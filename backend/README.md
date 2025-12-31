@@ -16,7 +16,7 @@ go run ./cmd/api
 
 ## ISBN lookup の挙動
 - `/isbn/lookup` は取得した書誌を `/books` に自動登録します
-- ISBN 取得結果はメモリにキャッシュします（`ISBN_CACHE_TTL_MINUTES`）
+- ISBN 取得結果はキャッシュします（`ISBN_CACHE_TTL_MINUTES`）
 
 ## シリーズ上書き
 - `/user-series/override` は既存の user-book を探して seriesId と volumeNumber を更新します

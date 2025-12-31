@@ -40,6 +40,7 @@ func main() {
 		tagRepo            repository.TagRepository
 		bookTagRepo        repository.BookTagRepository
 		recommendationRepo repository.RecommendationRepository
+		isbnCacheRepo      repository.IsbnCacheRepository
 	)
 
 	if cfg.DatabaseURL != "" {
@@ -57,6 +58,7 @@ func main() {
 			&gormrepo.Tag{},
 			&gormrepo.BookTag{},
 			&gormrepo.Recommendation{},
+			&gormrepo.IsbnCache{},
 		); err != nil {
 			log.Fatalf("db migrate error: %v", err)
 		}
@@ -69,6 +71,7 @@ func main() {
 		tagRepo = gormrepo.NewTagRepository(dbConn)
 		bookTagRepo = gormrepo.NewBookTagRepository(dbConn)
 		recommendationRepo = gormrepo.NewRecommendationRepository(dbConn)
+		isbnCacheRepo = gormrepo.NewIsbnCacheRepository(dbConn)
 	} else {
 		userRepo = repository.NewMemoryUserRepository()
 		bookRepo = repository.NewMemoryBookRepository()
@@ -79,10 +82,11 @@ func main() {
 		tagRepo = repository.NewMemoryTagRepository()
 		bookTagRepo = repository.NewMemoryBookTagRepository()
 		recommendationRepo = repository.NewMemoryRecommendationRepository()
+		isbnCacheRepo = repository.NewMemoryIsbnCacheRepository()
 	}
 	authService := auth.NewService(userRepo)
 	isbnCacheTTL := time.Duration(cfg.IsbnCacheTTLMinutes) * time.Minute
-	isbnService := isbn.NewService(cfg.GoogleBooksBaseURL, cfg.GoogleBooksAPIKey, isbnCacheTTL)
+	isbnService := isbn.NewService(cfg.GoogleBooksBaseURL, cfg.GoogleBooksAPIKey, isbnCacheTTL, isbnCacheRepo)
 	bookService := books.NewService(bookRepo)
 	userBookService := userbooks.NewService(userBookRepo)
 	usersService := users.NewService(userRepo, profileRepo)

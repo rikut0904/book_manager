@@ -7,10 +7,10 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"sync"
 	"time"
 
 	"book_manager/backend/internal/domain"
+	"book_manager/backend/internal/repository"
 )
 
 var ErrNotFound = errors.New("book not found")
@@ -19,20 +19,19 @@ type Service struct {
 	client  *http.Client
 	baseURL string
 	apiKey  string
-	mu      sync.RWMutex
-	cache   map[string]domain.IsbnCache
 	ttl     time.Duration
+	cache   repository.IsbnCacheRepository
 }
 
-func NewService(baseURL, apiKey string, ttl time.Duration) *Service {
+func NewService(baseURL, apiKey string, ttl time.Duration, cache repository.IsbnCacheRepository) *Service {
 	return &Service{
 		client: &http.Client{
 			Timeout: 8 * time.Second,
 		},
 		baseURL: baseURL,
 		apiKey:  apiKey,
-		cache:   make(map[string]domain.IsbnCache),
 		ttl:     ttl,
+		cache:   cache,
 	}
 }
 
@@ -50,9 +49,7 @@ func (s *Service) Lookup(isbn string) (domain.Book, error) {
 }
 
 func (s *Service) fromCache(isbn string) (domain.Book, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	entry, ok := s.cache[isbn]
+	entry, ok := s.cache.Get(isbn)
 	if !ok {
 		return domain.Book{}, false
 	}
@@ -63,13 +60,11 @@ func (s *Service) fromCache(isbn string) (domain.Book, bool) {
 }
 
 func (s *Service) storeCache(isbn string, book domain.Book) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.cache[isbn] = domain.IsbnCache{
+	_ = s.cache.Upsert(domain.IsbnCache{
 		ISBN13:    isbn,
 		Book:      book,
 		FetchedAt: time.Now(),
-	}
+	})
 }
 
 func (s *Service) fetchGoogleBooks(isbn string) (domain.Book, error) {
