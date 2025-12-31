@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"book_manager/backend/internal/auth"
+	"book_manager/backend/internal/books"
 	"book_manager/backend/internal/config"
 	"book_manager/backend/internal/handler"
 	"book_manager/backend/internal/isbn"
@@ -20,9 +21,11 @@ import (
 func main() {
 	cfg := config.Load()
 	userRepo := repository.NewMemoryUserRepository()
+	bookRepo := repository.NewMemoryBookRepository()
 	authService := auth.NewService(userRepo)
 	isbnService := isbn.NewService(cfg.GoogleBooksBaseURL, cfg.GoogleBooksAPIKey)
-	h := handler.New(authService, isbnService)
+	bookService := books.NewService(bookRepo)
+	h := handler.New(authService, isbnService, bookService)
 	r := router.New(h)
 
 	server := &http.Server{

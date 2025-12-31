@@ -4,20 +4,25 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"book_manager/backend/internal/auth"
+	"book_manager/backend/internal/books"
+	"book_manager/backend/internal/domain"
 	"book_manager/backend/internal/isbn"
 )
 
 type Handler struct {
 	auth *auth.Service
 	isbn *isbn.Service
+	books *books.Service
 }
 
-func New(authService *auth.Service, isbnService *isbn.Service) *Handler {
+func New(authService *auth.Service, isbnService *isbn.Service, bookService *books.Service) *Handler {
 	return &Handler{
 		auth: authService,
 		isbn: isbnService,
+		books: bookService,
 	}
 }
 
@@ -186,9 +191,47 @@ func (h *Handler) IsbnLookup(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Books(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		echoRequest(w, r)
+		items := h.books.List()
+		writeJSON(w, http.StatusOK, map[string]any{
+			"items": items,
+		})
 	case http.MethodPost:
-		echoRequest(w, r)
+		var req struct {
+			ISBN13        string   `json:"isbn13"`
+			Title         string   `json:"title"`
+			Authors       []string `json:"authors"`
+			Publisher     string   `json:"publisher"`
+			PublishedDate string   `json:"publishedDate"`
+			ThumbnailURL  string   `json:"thumbnailUrl"`
+			Source        string   `json:"source"`
+		}
+		if err := decodeJSON(r, &req); err != nil {
+			badRequest(w, "invalid json")
+			return
+		}
+		isbn13, err := validateBookRequest(req)
+		if err != nil {
+			badRequest(w, err.Error())
+			return
+		}
+		book, err := h.books.Create(domain.Book{
+			ISBN13:        isbn13,
+			Title:         req.Title,
+			Authors:       req.Authors,
+			Publisher:     req.Publisher,
+			PublishedDate: req.PublishedDate,
+			ThumbnailURL:  req.ThumbnailURL,
+			Source:        req.Source,
+		})
+		if err != nil {
+			if errors.Is(err, books.ErrBookExists) {
+				conflict(w, "book already exists")
+				return
+			}
+			internalError(w)
+			return
+		}
+		writeJSON(w, http.StatusOK, book)
 	default:
 		methodNotAllowed(w, http.MethodGet, http.MethodPost)
 	}
@@ -203,7 +246,13 @@ func (h *Handler) BookByID(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w, http.MethodGet)
 		return
 	}
-	echoRequest(w, r)
+	if id, ok := pathID("/books/", r.URL.Path); ok {
+		if book, found := h.books.Get(id); found {
+			writeJSON(w, http.StatusOK, book)
+			return
+		}
+	}
+	notFound(w)
 }
 
 func (h *Handler) UserBooks(w http.ResponseWriter, r *http.Request) {
@@ -422,4 +471,51 @@ func pathID(prefix, path string) (string, bool) {
 		return "", false
 	}
 	return id, true
+}
+
+func validateBookRequest(req struct {
+	ISBN13        string
+	Title         string
+	Authors       []string
+	Publisher     string
+	PublishedDate string
+	ThumbnailURL  string
+	Source        string
+}) (string, error) {
+	if strings.TrimSpace(req.Title) == "" {
+		return "", errors.New("title is required")
+	}
+	isbn13 := strings.TrimSpace(req.ISBN13)
+	if isbn13 != "" {
+		normalized := normalizeISBN13(isbn13)
+		if len(normalized) != 13 {
+			return "", errors.New("isbn13 must be 13 digits")
+		}
+		isbn13 = normalized
+	}
+	if req.Source != "" && req.Source != "manual" && req.Source != "google" {
+		return "", errors.New("source must be manual or google")
+	}
+	if req.PublishedDate != "" && !isISODate(req.PublishedDate) {
+		return "", errors.New("publishedDate must be YYYY-MM-DD")
+	}
+	return isbn13, nil
+}
+
+func normalizeISBN13(value string) string {
+	builder := strings.Builder{}
+	for _, r := range value {
+		if r >= '0' && r <= '9' {
+			builder.WriteRune(r)
+		}
+	}
+	return builder.String()
+}
+
+func isISODate(value string) bool {
+	if len(value) != 10 {
+		return false
+	}
+	_, err := time.Parse("2006-01-02", value)
+	return err == nil
 }

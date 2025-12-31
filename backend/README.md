@@ -8,6 +8,7 @@ go run ./cmd/api
 ## 実装状況
 - Auth: インメモリ実装（再起動で消える）
 - ISBN lookup: Google Books API 連携
+- 書誌マスタ（/books）: インメモリ実装
 - そのほか: echo 返却
 
 ## 環境変数
