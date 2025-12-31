@@ -22,7 +22,7 @@ go run ./cmd/api
 - `/user-series/override` は既存の user-book を探して seriesId と volumeNumber を更新します
 
 ## 書誌報告
-- `/book-reports` はメール送信の代わりにログ出力します
+- `/book-reports` は SMTP 設定がある場合にメール送信します
 
 ## 環境変数
 - `PORT`: APIのポート（default: 8080）
@@ -30,6 +30,11 @@ go run ./cmd/api
 - `GOOGLE_BOOKS_API_KEY`: Google Books APIキー（未設定でも動作）
 - `GOOGLE_BOOKS_BASE_URL`: APIベースURL（default: https://www.googleapis.com/books/v1/volumes）
 - `DATABASE_URL`: PostgreSQL 接続URL（未設定時はメモリ実装）
+- `SMTP_HOST`: SMTPホスト（未設定時はログ出力）
+- `SMTP_PORT`: SMTPポート（default: 587）
+- `SMTP_USER`: SMTPユーザー
+- `SMTP_PASS`: SMTPパスワード
+- `SMTP_FROM`: 送信元メールアドレス（未設定時は SMTP_USER）
 
 ## ヘルスチェック
 ```bash

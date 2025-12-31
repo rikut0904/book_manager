@@ -95,7 +95,13 @@ func main() {
 	nextToBuyService := nexttobuy.NewService(nextToBuyRepo)
 	tagsService := tags.NewService(tagRepo, bookTagRepo)
 	recsService := recommendations.NewService(recommendationRepo)
-	reportsService := reports.NewService(cfg.BookReportTo)
+	reportsService := reports.NewService(cfg.BookReportTo, reports.SMTPConfig{
+		Host: cfg.SMTPHost,
+		Port: cfg.SMTPPort,
+		User: cfg.SMTPUser,
+		Pass: cfg.SMTPPass,
+		From: cfg.SMTPFrom,
+	})
 	_ = authService.SeedUser("user_demo", "demo@book.local", "demo", "password")
 	h := handler.New(
 		authService,

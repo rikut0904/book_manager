@@ -13,6 +13,11 @@ type Config struct {
 	BookReportTo        string
 	IsbnCacheTTLMinutes int
 	DatabaseURL         string
+	SMTPHost            string
+	SMTPPort            string
+	SMTPUser            string
+	SMTPPass            string
+	SMTPFrom            string
 }
 
 func Load() Config {
@@ -24,6 +29,11 @@ func Load() Config {
 		BookReportTo:        getEnv("BOOK_REPORT_TO", "product@rikut0904.site"),
 		IsbnCacheTTLMinutes: getEnvInt("ISBN_CACHE_TTL_MINUTES", 1440),
 		DatabaseURL:         getEnv("DATABASE_URL", ""),
+		SMTPHost:            getEnv("SMTP_HOST", ""),
+		SMTPPort:            getEnv("SMTP_PORT", "587"),
+		SMTPUser:            getEnv("SMTP_USER", ""),
+		SMTPPass:            getEnv("SMTP_PASS", ""),
+		SMTPFrom:            getEnv("SMTP_FROM", ""),
 	}
 }
 
