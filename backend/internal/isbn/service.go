@@ -20,17 +20,19 @@ type Service struct {
 	baseURL string
 	apiKey  string
 	mu      sync.RWMutex
-	cache   map[string]domain.Book
+	cache   map[string]domain.IsbnCache
+	ttl     time.Duration
 }
 
-func NewService(baseURL, apiKey string) *Service {
+func NewService(baseURL, apiKey string, ttl time.Duration) *Service {
 	return &Service{
 		client: &http.Client{
 			Timeout: 8 * time.Second,
 		},
 		baseURL: baseURL,
 		apiKey:  apiKey,
-		cache:   make(map[string]domain.Book),
+		cache:   make(map[string]domain.IsbnCache),
+		ttl:     ttl,
 	}
 }
 
@@ -50,14 +52,24 @@ func (s *Service) Lookup(isbn string) (domain.Book, error) {
 func (s *Service) fromCache(isbn string) (domain.Book, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	book, ok := s.cache[isbn]
-	return book, ok
+	entry, ok := s.cache[isbn]
+	if !ok {
+		return domain.Book{}, false
+	}
+	if s.ttl > 0 && time.Since(entry.FetchedAt) > s.ttl {
+		return domain.Book{}, false
+	}
+	return entry.Book, true
 }
 
 func (s *Service) storeCache(isbn string, book domain.Book) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.cache[isbn] = book
+	s.cache[isbn] = domain.IsbnCache{
+		ISBN13:    isbn,
+		Book:      book,
+		FetchedAt: time.Now(),
+	}
 }
 
 func (s *Service) fetchGoogleBooks(isbn string) (domain.Book, error) {
@@ -124,8 +136,8 @@ type googleBooksResponse struct {
 }
 
 type googleBooksItem struct {
-	ID         string             `json:"id"`
-	VolumeInfo googleBooksVolume  `json:"volumeInfo"`
+	ID         string            `json:"id"`
+	VolumeInfo googleBooksVolume `json:"volumeInfo"`
 }
 
 type googleBooksVolume struct {

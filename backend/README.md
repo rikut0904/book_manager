@@ -16,6 +16,7 @@ go run ./cmd/api
 
 ## ISBN lookup の挙動
 - `/isbn/lookup` は取得した書誌を `/books` に自動登録します
+- ISBN 取得結果はメモリにキャッシュします（`ISBN_CACHE_TTL_MINUTES`）
 
 ## シリーズ上書き
 - `/user-series/override` は既存の user-book を探して seriesId と volumeNumber を更新します
@@ -28,6 +29,7 @@ go run ./cmd/api
 - `APP_ENV`: 実行環境名（default: local）
 - `GOOGLE_BOOKS_API_KEY`: Google Books APIキー（未設定でも動作）
 - `GOOGLE_BOOKS_BASE_URL`: APIベースURL（default: https://www.googleapis.com/books/v1/volumes）
+- `DATABASE_URL`: PostgreSQL 接続URL（未設定時はメモリ実装）
 
 ## ヘルスチェック
 ```bash
