@@ -86,6 +86,18 @@ func (h *Handler) AuthSignup(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "email, password, username are required")
 		return
 	}
+	if !isValidEmail(req.Email) {
+		badRequest(w, "email is invalid")
+		return
+	}
+	if len(req.Password) < 8 {
+		badRequest(w, "password must be at least 8 characters")
+		return
+	}
+	if strings.TrimSpace(req.Username) == "" {
+		badRequest(w, "username is required")
+		return
+	}
 	result, err := h.auth.Signup(req.Email, req.Password, req.Username)
 	if err != nil {
 		if errors.Is(err, auth.ErrUserExists) {
@@ -121,6 +133,10 @@ func (h *Handler) AuthLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Email == "" || req.Password == "" {
 		badRequest(w, "email and password are required")
+		return
+	}
+	if !isValidEmail(req.Email) {
+		badRequest(w, "email is invalid")
 		return
 	}
 	result, err := h.auth.Login(req.Email, req.Password)
@@ -159,6 +175,10 @@ func (h *Handler) AuthRefresh(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "refreshToken is required")
 		return
 	}
+	if strings.TrimSpace(req.RefreshToken) == "" {
+		badRequest(w, "refreshToken is required")
+		return
+	}
 	accessToken, refreshToken, err := h.auth.Refresh(req.RefreshToken)
 	if err != nil {
 		if errors.Is(err, auth.ErrInvalidCredentials) {
@@ -190,6 +210,10 @@ func (h *Handler) AuthLogout(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "refreshToken is required")
 		return
 	}
+	if strings.TrimSpace(req.RefreshToken) == "" {
+		badRequest(w, "refreshToken is required")
+		return
+	}
 	h.auth.Logout(req.RefreshToken)
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
@@ -199,11 +223,11 @@ func (h *Handler) IsbnLookup(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w, http.MethodGet)
 		return
 	}
-	if r.URL.Query().Get("isbn") == "" {
+	isbnValue := strings.TrimSpace(r.URL.Query().Get("isbn"))
+	if isbnValue == "" {
 		badRequest(w, "isbn is required")
 		return
 	}
-	isbnValue := r.URL.Query().Get("isbn")
 	if book, ok := h.books.FindByISBN(isbnValue); ok {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"id":            book.ID,
@@ -433,6 +457,10 @@ func (h *Handler) UserSeriesOverride(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "volumeNumber is required")
 		return
 	}
+	if *req.VolumeNumber <= 0 {
+		badRequest(w, "volumeNumber must be positive")
+		return
+	}
 	userID := strings.TrimSpace(req.UserID)
 	if userID == "" {
 		userID = userIDFromRequest(r)
@@ -487,6 +515,14 @@ func (h *Handler) Favorites(w http.ResponseWriter, r *http.Request) {
 		}
 		if favoriteType == "series" && strings.TrimSpace(req.SeriesID) == "" {
 			badRequest(w, "seriesId is required")
+			return
+		}
+		if favoriteType == "book" && strings.TrimSpace(req.SeriesID) != "" {
+			badRequest(w, "seriesId must be empty for book favorite")
+			return
+		}
+		if favoriteType == "series" && strings.TrimSpace(req.BookID) != "" {
+			badRequest(w, "bookId must be empty for series favorite")
 			return
 		}
 		userID := userIDFromRequest(r)
@@ -553,6 +589,10 @@ func (h *Handler) NextToBuyManual(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "title is required")
 		return
 	}
+	if req.VolumeNumber != nil && *req.VolumeNumber < 0 {
+		badRequest(w, "volumeNumber must be 0 or positive")
+		return
+	}
 	userID := userIDFromRequest(r)
 	volume := 0
 	if req.VolumeNumber != nil {
@@ -590,6 +630,10 @@ func (h *Handler) NextToBuyManualByID(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.Title == nil && req.SeriesName == nil && req.VolumeNumber == nil && req.Note == nil {
 			badRequest(w, "no fields to update")
+			return
+		}
+		if req.VolumeNumber != nil && *req.VolumeNumber < 0 {
+			badRequest(w, "volumeNumber must be 0 or positive")
 			return
 		}
 		item, ok := h.nextToBuy.Update(id, nexttobuy.UpdateInput{
@@ -752,6 +796,10 @@ func (h *Handler) Recommendations(w http.ResponseWriter, r *http.Request) {
 		}
 		if strings.TrimSpace(req.BookID) == "" {
 			badRequest(w, "bookId is required")
+			return
+		}
+		if strings.TrimSpace(req.Comment) == "" {
+			badRequest(w, "comment is required")
 			return
 		}
 		userID := userIDFromRequest(r)
@@ -920,11 +968,19 @@ func (h *Handler) Follows(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		followeeID, _ := pathID("/follows/", r.URL.Path)
 		followerID := userIDFromRequest(r)
+		if followeeID == followerID {
+			badRequest(w, "cannot follow yourself")
+			return
+		}
 		h.follows.Follow(followerID, followeeID)
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	case http.MethodDelete:
 		followeeID, _ := pathID("/follows/", r.URL.Path)
 		followerID := userIDFromRequest(r)
+		if followeeID == followerID {
+			badRequest(w, "cannot unfollow yourself")
+			return
+		}
 		h.follows.Unfollow(followerID, followeeID)
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	default:
@@ -1032,4 +1088,19 @@ func isISODate(value string) bool {
 	}
 	_, err := time.Parse("2006-01-02", value)
 	return err == nil
+}
+
+func isValidEmail(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
+	}
+	parts := strings.Split(value, "@")
+	if len(parts) != 2 {
+		return false
+	}
+	if parts[0] == "" || parts[1] == "" {
+		return false
+	}
+	return strings.Contains(parts[1], ".")
 }
