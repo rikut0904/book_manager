@@ -41,6 +41,7 @@ func main() {
 		bookTagRepo        repository.BookTagRepository
 		recommendationRepo repository.RecommendationRepository
 		isbnCacheRepo      repository.IsbnCacheRepository
+		auditLogRepo       repository.AuditLogRepository
 	)
 
 	if cfg.DatabaseURL != "" {
@@ -59,6 +60,7 @@ func main() {
 			&gormrepo.BookTag{},
 			&gormrepo.Recommendation{},
 			&gormrepo.IsbnCache{},
+			&gormrepo.AuditLog{},
 		); err != nil {
 			log.Fatalf("db migrate error: %v", err)
 		}
@@ -72,6 +74,7 @@ func main() {
 		bookTagRepo = gormrepo.NewBookTagRepository(dbConn)
 		recommendationRepo = gormrepo.NewRecommendationRepository(dbConn)
 		isbnCacheRepo = gormrepo.NewIsbnCacheRepository(dbConn)
+		auditLogRepo = gormrepo.NewAuditLogRepository(dbConn)
 	} else {
 		userRepo = repository.NewMemoryUserRepository()
 		bookRepo = repository.NewMemoryBookRepository()
@@ -83,6 +86,7 @@ func main() {
 		bookTagRepo = repository.NewMemoryBookTagRepository()
 		recommendationRepo = repository.NewMemoryRecommendationRepository()
 		isbnCacheRepo = repository.NewMemoryIsbnCacheRepository()
+		auditLogRepo = repository.NewMemoryAuditLogRepository()
 	}
 	authService := auth.NewService(userRepo)
 	isbnCacheTTL := time.Duration(cfg.IsbnCacheTTLMinutes) * time.Minute
@@ -116,7 +120,7 @@ func main() {
 		recsService,
 		reportsService,
 	)
-	r := router.New(h)
+	r := router.New(h, auditLogRepo)
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
@@ -131,6 +135,8 @@ func main() {
 		}
 	}()
 
+	go startAuditCleanup(auditLogRepo)
+
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	<-stop
@@ -141,5 +147,19 @@ func main() {
 	log.Println("shutting down server...")
 	if err := server.Shutdown(ctx); err != nil {
 		log.Printf("shutdown error: %v", err)
+	}
+}
+
+func startAuditCleanup(repo repository.AuditLogRepository) {
+	if repo == nil {
+		return
+	}
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+
+	for {
+		cutoff := time.Now().AddDate(0, 0, -90)
+		_ = repo.DeleteBefore(cutoff)
+		<-ticker.C
 	}
 }

@@ -12,6 +12,7 @@ go run ./cmd/api
 - 所蔵（/user-books）: インメモリ実装
 - Users/Follows: インメモリ実装
 - Favorites/Next-to-buy/Tags/Recommendations: インメモリ実装
+- 監査ログ: DB実装（DATABASE_URLがある場合）
 - そのほか: echo 返却
 
 ## ISBN lookup の挙動
@@ -23,6 +24,9 @@ go run ./cmd/api
 
 ## 書誌報告
 - `/book-reports` は SMTP 設定がある場合にメール送信します
+
+## 監査ログ
+- 全APIのリクエストを `audit_logs` に記録し、90日経過分を削除します
 
 ## 環境変数
 - `PORT`: APIのポート（default: 8080）

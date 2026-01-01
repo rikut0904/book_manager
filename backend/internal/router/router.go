@@ -4,9 +4,10 @@ import (
 	"net/http"
 
 	"book_manager/backend/internal/handler"
+	"book_manager/backend/internal/repository"
 )
 
-func New(h *handler.Handler) http.Handler {
+func New(h *handler.Handler, auditRepo repository.AuditLogRepository) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", h.Health)
 
@@ -47,5 +48,5 @@ func New(h *handler.Handler) http.Handler {
 
 	mux.HandleFunc("/book-reports", h.BookReports)
 
-	return mux
+	return AuditMiddleware(auditRepo, mux)
 }

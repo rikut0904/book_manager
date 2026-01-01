@@ -81,3 +81,15 @@ type IsbnCache struct {
 	Payload   datatypes.JSON `gorm:"type:jsonb"`
 	FetchedAt time.Time      `gorm:"index"`
 }
+
+type AuditLog struct {
+	ID        string `gorm:"primaryKey"`
+	UserID    string `gorm:"index"`
+	Action    string
+	Entity    string
+	EntityID  string
+	Payload   datatypes.JSON `gorm:"type:jsonb"`
+	IP        string
+	UserAgent string
+	CreatedAt time.Time `gorm:"index"`
+}
