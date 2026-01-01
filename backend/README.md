@@ -42,6 +42,7 @@ go run ./cmd/api
 - `SMTP_USER`: SMTPユーザー
 - `SMTP_PASS`: SMTPパスワード
 - `SMTP_FROM`: 送信元メールアドレス（未設定時は SMTP_USER）
+- `CORS_ALLOWED_ORIGINS`: CORS許可オリジン（default: http://localhost:3000）
 
 ## ヘルスチェック
 ```bash

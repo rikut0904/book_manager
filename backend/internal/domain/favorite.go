@@ -1,9 +1,9 @@
 package domain
 
 type Favorite struct {
-	ID       string
-	UserID   string
-	Type     string
-	BookID   string
-	SeriesID string
+	ID       string `json:"id"`
+	UserID   string `json:"userId"`
+	Type     string `json:"type"`
+	BookID   string `json:"bookId"`
+	SeriesID string `json:"seriesId"`
 }

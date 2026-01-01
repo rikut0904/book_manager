@@ -1,33 +1,52 @@
-import Link from "next/link";
+"use client";
 
-const books = [
-  {
-    id: "bk_001",
-    title: "透明な約束",
-    author: "冬原 千景",
-    series: "星街メトロ",
-    volume: 4,
-    note: "サイン本",
-  },
-  {
-    id: "bk_002",
-    title: "海辺の標本室",
-    author: "浅井 まどか",
-    series: "海辺の研究録",
-    volume: 1,
-    note: "装丁が好き",
-  },
-  {
-    id: "bk_003",
-    title: "火曜の地図帳",
-    author: "鐘ヶ江 透",
-    series: "徒歩旅行記",
-    volume: 2,
-    note: "次巻予約済み",
-  },
-];
+import Link from "next/link";
+import { useEffect, useState } from "react";
+
+import { fetchJSON } from "@/lib/api";
+
+type Book = {
+  id: string;
+  title: string;
+  authors: string[];
+  publisher: string;
+  publishedDate: string;
+  thumbnailUrl: string;
+  isbn13: string;
+  source: string;
+};
 
 export default function BooksPage() {
+  const [items, setItems] = useState<Book[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchJSON<{ items: Book[] }>("/books", { auth: true })
+      .then((data) => {
+        if (!isMounted) {
+          return;
+        }
+        setItems(data.items ?? []);
+      })
+      .catch(() => {
+        if (!isMounted) {
+          return;
+        }
+        setError("書籍一覧を取得できませんでした。");
+      })
+      .finally(() => {
+        if (!isMounted) {
+          return;
+        }
+        setIsLoading(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   return (
     <div className="flex flex-col gap-6">
       <section className="rounded-3xl border border-[#e4d8c7] bg-white/80 p-6 shadow-sm">
@@ -69,22 +88,39 @@ export default function BooksPage() {
       </section>
 
       <section className="grid gap-4 lg:grid-cols-3">
-        {books.map((book) => (
+        {isLoading ? (
+          <div className="rounded-3xl border border-[#e4d8c7] bg-white/70 p-5 text-sm text-[#5c5d63]">
+            読み込み中...
+          </div>
+        ) : null}
+        {error ? (
+          <div className="rounded-3xl border border-[#e4d8c7] bg-white/70 p-5 text-sm text-red-600">
+            {error}
+          </div>
+        ) : null}
+        {!isLoading && !error && items.length === 0 ? (
+          <div className="rounded-3xl border border-[#e4d8c7] bg-white/70 p-5 text-sm text-[#5c5d63]">
+            まだ登録された書籍がありません。
+          </div>
+        ) : null}
+        {items.map((book, index) => (
           <Link
-            key={book.id}
+            key={book.id || book.isbn13 || `book-${index}`}
             className="group rounded-3xl border border-[#e4d8c7] bg-white/70 p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
             href={`/books/${book.id}`}
           >
             <div className="flex items-center justify-between text-xs text-[#5c5d63]">
-              <span>{book.series}</span>
-              <span>Vol.{book.volume}</span>
+              <span>{book.publisher || "出版社未登録"}</span>
+              <span>{book.publishedDate || "発売日未登録"}</span>
             </div>
             <h2 className="mt-4 font-[var(--font-display)] text-xl text-[#1b1c1f]">
               {book.title}
             </h2>
-            <p className="mt-2 text-sm text-[#5c5d63]">{book.author}</p>
+            <p className="mt-2 text-sm text-[#5c5d63]">
+              {book.authors?.join(" / ") || "著者未登録"}
+            </p>
             <div className="mt-4 rounded-2xl bg-[#f6f1e7] px-3 py-2 text-xs text-[#5c5d63]">
-              メモ: {book.note}
+              ISBN: {book.isbn13 || "未登録"}
             </div>
             <p className="mt-4 text-xs text-[#c86b3c]">詳細を見る →</p>
           </Link>

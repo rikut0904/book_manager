@@ -37,6 +37,12 @@ func NewService(users repository.UserRepository) *Service {
 }
 
 func (s *Service) SeedUser(id, email, username, password string) error {
+	if _, ok := s.users.FindByID(id); ok {
+		return nil
+	}
+	if _, ok := s.users.FindByEmail(email); ok {
+		return nil
+	}
 	hashed, err := hashPassword(password)
 	if err != nil {
 		return err

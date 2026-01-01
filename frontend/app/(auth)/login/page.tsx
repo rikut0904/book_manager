@@ -1,6 +1,44 @@
+"use client";
+
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+
+import { fetchJSON } from "@/lib/api";
+import { setAuthState } from "@/lib/auth";
 
 export default function LoginPage() {
+  const router = useRouter();
+  const [form, setForm] = useState({ email: "", password: "" });
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      const data = await fetchJSON<{
+        accessToken: string;
+        refreshToken: string;
+        user: { id: string };
+      }>("/auth/login", {
+        method: "POST",
+        body: JSON.stringify(form),
+      });
+      setAuthState({
+        accessToken: data.accessToken,
+        refreshToken: data.refreshToken,
+        userId: data.user.id,
+      });
+      router.push("/books");
+    } catch (err) {
+      setError("ログインに失敗しました。");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-4xl items-center justify-center px-6 py-16">
       <div className="grid w-full gap-8 rounded-[32px] border border-[#e4d8c7] bg-white/80 p-8 shadow-lg md:grid-cols-[1.1fr_0.9fr]">
@@ -22,7 +60,7 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <form className="flex flex-col gap-4">
+        <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
           <label className="text-sm text-[#1b1c1f]">
             メールアドレス
             <input
@@ -30,6 +68,10 @@ export default function LoginPage() {
               name="email"
               placeholder="user@example.com"
               type="email"
+              value={form.email}
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, email: event.target.value }))
+              }
             />
           </label>
           <label className="text-sm text-[#1b1c1f]">
@@ -39,13 +81,19 @@ export default function LoginPage() {
               name="password"
               placeholder="********"
               type="password"
+              value={form.password}
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, password: event.target.value }))
+              }
             />
           </label>
+          {error ? <p className="text-xs text-red-600">{error}</p> : null}
           <button
             className="mt-2 rounded-full bg-[#1b1c1f] px-5 py-3 text-sm font-medium text-white shadow-lg shadow-[#1b1c1f]/10 transition hover:bg-black"
-            type="button"
+            type="submit"
+            disabled={isSubmitting}
           >
-            ログイン
+            {isSubmitting ? "ログイン中..." : "ログイン"}
           </button>
           <div className="flex items-center justify-between text-xs text-[#5c5d63]">
             <Link className="hover:text-[#1b1c1f]" href="#">

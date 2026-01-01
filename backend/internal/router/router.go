@@ -7,7 +7,11 @@ import (
 	"book_manager/backend/internal/repository"
 )
 
-func New(h *handler.Handler, auditRepo repository.AuditLogRepository) http.Handler {
+func New(
+	h *handler.Handler,
+	auditRepo repository.AuditLogRepository,
+	allowedOrigins string,
+) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", h.Health)
 
@@ -48,5 +52,6 @@ func New(h *handler.Handler, auditRepo repository.AuditLogRepository) http.Handl
 
 	mux.HandleFunc("/book-reports", h.BookReports)
 
-	return AuditMiddleware(auditRepo, mux)
+	handlerWithAudit := AuditMiddleware(auditRepo, mux)
+	return CORSMiddleware(allowedOrigins, handlerWithAudit)
 }

@@ -1,4 +1,11 @@
+"use client";
+
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+
+import { fetchJSON } from "@/lib/api";
+import { clearAuthState, getAuthState } from "@/lib/auth";
 
 const navItems = [
   { href: "/books", label: "所蔵一覧" },
@@ -15,6 +22,116 @@ export default function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const [isReady, setIsReady] = useState(false);
+  const [isAuthed, setIsAuthed] = useState(false);
+  const [userId, setUserId] = useState("");
+  const [username, setUsername] = useState("");
+  const router = useRouter();
+
+  useEffect(() => {
+    const auth = getAuthState();
+    setIsAuthed(Boolean(auth?.accessToken));
+    setUserId(auth?.userId ?? "");
+    setIsReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!userId) {
+      return;
+    }
+    let isMounted = true;
+    fetchJSON<{ user: { username: string } }>(`/users/${userId}`, {
+      auth: true,
+    })
+      .then((data) => {
+        if (!isMounted) {
+          return;
+        }
+        setUsername(data.user?.username ?? "");
+      })
+      .catch(() => {
+        if (!isMounted) {
+          return;
+        }
+        setUsername("");
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [userId]);
+
+  const handleLogout = async () => {
+    const auth = getAuthState();
+    try {
+      await fetchJSON("/auth/logout", {
+        method: "POST",
+        body: JSON.stringify({ refreshToken: auth?.refreshToken ?? "" }),
+      });
+    } catch {
+      // ignore logout errors
+    } finally {
+      clearAuthState();
+      router.push("/login");
+    }
+  };
+
+  if (!isReady) {
+    return <div className="min-h-screen" />;
+  }
+
+  if (!isAuthed) {
+    return (
+      <div className="min-h-screen">
+        <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 pt-8">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[#e4d8c7] bg-white/70 text-lg font-semibold">
+              B
+            </div>
+            <div>
+              <p className="text-sm tracking-[0.2em] text-[#5c5d63]">BOOK</p>
+              <p className="font-[var(--font-display)] text-xl font-semibold">
+                Manager
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 text-sm">
+            <Link className="text-[#5c5d63] hover:text-[#1b1c1f]" href="/login">
+              ログイン
+            </Link>
+            <Link
+              className="rounded-full bg-[#c86b3c] px-4 py-2 text-white"
+              href="/signup"
+            >
+              新規登録
+            </Link>
+          </div>
+        </header>
+        <main className="mx-auto flex min-h-[70vh] max-w-3xl flex-col items-center justify-center gap-4 px-6 text-center">
+          <h1 className="font-[var(--font-display)] text-3xl">
+            ログインが必要です
+          </h1>
+          <p className="text-sm text-[#5c5d63]">
+            所蔵管理やお気に入り機能を使うにはログインしてください。
+          </p>
+          <div className="flex gap-3">
+            <Link
+              className="rounded-full bg-[#1b1c1f] px-5 py-3 text-sm font-medium text-white"
+              href="/login"
+            >
+              ログインする
+            </Link>
+            <Link
+              className="rounded-full border border-[#1b1c1f] px-5 py-3 text-sm font-medium text-[#1b1c1f]"
+              href="/signup"
+            >
+              新規登録
+            </Link>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-10 border-b border-[#e4d8c7] bg-[#f6f1e7]/90 backdrop-blur">
@@ -38,11 +155,20 @@ export default function AppLayout({
               同期済み
             </div>
             <div className="flex items-center gap-2 text-sm">
-              <span className="text-[#5c5d63]">rikut</span>
+              <span className="text-[#5c5d63]">
+                {username ? `@${username}` : userId ? `@${userId}` : "user"}
+              </span>
               <div className="h-9 w-9 rounded-full bg-[#1b1c1f] text-center text-sm leading-9 text-white">
                 R
               </div>
             </div>
+            <button
+              className="rounded-full border border-[#e4d8c7] px-3 py-2 text-xs text-[#5c5d63] hover:bg-white"
+              type="button"
+              onClick={handleLogout}
+            >
+              ログアウト
+            </button>
           </div>
         </div>
       </header>

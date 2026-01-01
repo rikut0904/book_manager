@@ -1,6 +1,40 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
+
+import { fetchJSON } from "@/lib/api";
+
+type UserItem = {
+  id: string;
+  email: string;
+  username: string;
+};
 
 export default function UsersPage() {
+  const [items, setItems] = useState<UserItem[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchJSON<{ items: UserItem[] }>("/users", { auth: true })
+      .then((data) => {
+        if (!isMounted) {
+          return;
+        }
+        setItems(data.items ?? []);
+      })
+      .catch(() => {
+        if (!isMounted) {
+          return;
+        }
+        setError("ユーザー一覧を取得できませんでした。");
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   return (
     <div className="flex flex-col gap-6">
       <section className="rounded-3xl border border-[#e4d8c7] bg-white/80 p-6 shadow-sm">
@@ -22,20 +56,27 @@ export default function UsersPage() {
       </section>
 
       <section className="grid gap-4 md:grid-cols-2">
-        {[
-          { id: "u1", name: "mizu", note: "本棚: 82冊" },
-          { id: "u2", name: "kent", note: "お気に入り: 12冊" },
-        ].map((user) => (
+        {error ? (
+          <div className="rounded-3xl border border-[#e4d8c7] bg-white/70 p-5 text-sm text-red-600">
+            {error}
+          </div>
+        ) : null}
+        {!error && items.length === 0 ? (
+          <div className="rounded-3xl border border-[#e4d8c7] bg-white/70 p-5 text-sm text-[#5c5d63]">
+            まだユーザーが登録されていません。
+          </div>
+        ) : null}
+        {items.map((user) => (
           <Link
             key={user.id}
             className="rounded-3xl border border-[#e4d8c7] bg-white/70 p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
             href={`/users/${user.id}`}
           >
-            <p className="text-xs text-[#c86b3c]">@{user.name}</p>
+            <p className="text-xs text-[#c86b3c]">@{user.username}</p>
             <p className="mt-2 font-[var(--font-display)] text-xl">
-              {user.name}
+              {user.username}
             </p>
-            <p className="mt-2 text-sm text-[#5c5d63]">{user.note}</p>
+            <p className="mt-2 text-sm text-[#5c5d63]">{user.email}</p>
           </Link>
         ))}
       </section>

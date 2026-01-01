@@ -1,12 +1,12 @@
 package domain
 
 type Book struct {
-	ID            string
-	ISBN13        string
-	Title         string
-	Authors       []string
-	Publisher     string
-	PublishedDate string
-	ThumbnailURL  string
-	Source        string
+	ID            string   `json:"id"`
+	ISBN13        string   `json:"isbn13"`
+	Title         string   `json:"title"`
+	Authors       []string `json:"authors"`
+	Publisher     string   `json:"publisher"`
+	PublishedDate string   `json:"publishedDate"`
+	ThumbnailURL  string   `json:"thumbnailUrl"`
+	Source        string   `json:"source"`
 }

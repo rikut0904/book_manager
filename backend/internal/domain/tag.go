@@ -1,7 +1,7 @@
 package domain
 
 type Tag struct {
-	ID          string
-	OwnerUserID string
-	Name        string
+	ID          string `json:"id"`
+	OwnerUserID string `json:"ownerUserId"`
+	Name        string `json:"name"`
 }

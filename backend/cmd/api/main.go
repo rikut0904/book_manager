@@ -125,7 +125,7 @@ func main() {
 		recsService,
 		reportsService,
 	)
-	r := router.New(h, auditLogRepo)
+	r := router.New(h, auditLogRepo, cfg.CORSAllowedOrigins)
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,

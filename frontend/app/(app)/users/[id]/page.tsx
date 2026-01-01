@@ -1,21 +1,78 @@
+"use client";
+
+import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
+
+import { fetchJSON } from "@/lib/api";
+
+type UserDetail = {
+  user: { id: string; email: string; username: string };
+  settings: { visibility: string };
+  stats: { ownedCount: number; seriesCount: number; followers: number; following: number };
+  recommendations: string[];
+};
+
 export default function UserDetailPage() {
+  const params = useParams<{ id: string }>();
+  const [detail, setDetail] = useState<UserDetail | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!params?.id) {
+      return;
+    }
+    let isMounted = true;
+    fetchJSON<UserDetail>(`/users/${params.id}`, { auth: true })
+      .then((data) => {
+        if (!isMounted) {
+          return;
+        }
+        setDetail(data);
+      })
+      .catch(() => {
+        if (!isMounted) {
+          return;
+        }
+        setError("プロフィールを取得できませんでした。");
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [params?.id]);
+
   return (
     <div className="flex flex-col gap-6">
       <section className="rounded-3xl border border-[#e4d8c7] bg-white/80 p-6 shadow-sm">
         <p className="text-xs uppercase tracking-[0.3em] text-[#c86b3c]">
           Profile
         </p>
-        <h1 className="mt-2 font-[var(--font-display)] text-3xl">mizu</h1>
+        <h1 className="mt-2 font-[var(--font-display)] text-3xl">
+          {detail?.user.username || "ユーザー"}
+        </h1>
         <p className="mt-2 text-sm text-[#5c5d63]">
-          公開範囲: フォロワー限定
+          公開範囲: {detail?.settings.visibility || "public"}
         </p>
       </section>
 
       <section className="grid gap-4 md:grid-cols-3">
+        {error ? (
+          <div className="rounded-3xl border border-[#e4d8c7] bg-white/70 p-5 text-sm text-red-600">
+            {error}
+          </div>
+        ) : null}
         {[
-          { label: "所蔵数", value: "82冊" },
-          { label: "シリーズ", value: "14件" },
-          { label: "フォロワー", value: "5人" },
+          {
+            label: "所蔵数",
+            value: detail ? `${detail.stats.ownedCount}冊` : "--",
+          },
+          {
+            label: "シリーズ",
+            value: detail ? `${detail.stats.seriesCount}件` : "--",
+          },
+          {
+            label: "フォロワー",
+            value: detail ? `${detail.stats.followers}人` : "--",
+          },
         ].map((stat) => (
           <div
             key={stat.label}
@@ -34,7 +91,12 @@ export default function UserDetailPage() {
           おすすめした本
         </h2>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
-          {["夜更けの灯台", "空間の縁 1"].map((title) => (
+          {(detail?.recommendations ?? []).length === 0 ? (
+            <div className="rounded-2xl border border-[#e4d8c7] bg-white p-4 text-sm text-[#5c5d63]">
+              まだおすすめがありません。
+            </div>
+          ) : null}
+          {(detail?.recommendations ?? []).map((title) => (
             <div
               key={title}
               className="rounded-2xl border border-[#e4d8c7] bg-white p-4 text-sm text-[#5c5d63]"
