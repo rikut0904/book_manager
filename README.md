@@ -25,6 +25,14 @@
 - ホスティング: Vercel (FE), Railway (BE/DB)
 - ISBN: Google Books API
 
+## Dockerでの起動
+```bash
+docker compose up --build
+```
+
+- フロント: http://localhost:3000
+- バック: http://localhost:8080
+
 ## 設計ドキュメント
 - 画面設計: doc/design-ui-flow.md
 - データ設計: doc/design-db.md

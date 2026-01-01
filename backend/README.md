@@ -5,6 +5,9 @@
 go run ./cmd/api
 ```
 
+## .env の読み込み
+- `backend/.env` または ルート `../.env` を自動で読み込みます
+
 ## 実装状況
 - Auth: インメモリ実装（再起動で消える）
 - ISBN lookup: Google Books API 連携

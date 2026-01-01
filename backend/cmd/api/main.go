@@ -26,9 +26,14 @@ import (
 	"book_manager/backend/internal/tags"
 	"book_manager/backend/internal/userbooks"
 	"book_manager/backend/internal/users"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	_ = godotenv.Load()
+	_ = godotenv.Load("../.env")
+
 	cfg := config.Load()
 	var (
 		userRepo           repository.UserRepository
