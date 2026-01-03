@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"book_manager/backend/internal/ai"
 	"book_manager/backend/internal/auth"
 	"book_manager/backend/internal/books"
 	"book_manager/backend/internal/domain"
@@ -15,23 +16,28 @@ import (
 	"book_manager/backend/internal/nexttobuy"
 	"book_manager/backend/internal/recommendations"
 	"book_manager/backend/internal/reports"
+	"book_manager/backend/internal/series"
 	"book_manager/backend/internal/tags"
 	"book_manager/backend/internal/userbooks"
 	"book_manager/backend/internal/users"
 )
 
 type Handler struct {
-	auth      *auth.Service
-	isbn      *isbn.Service
-	books     *books.Service
-	userBooks *userbooks.Service
-	users     *users.Service
-	follows   *follows.Service
-	favorites *favorites.Service
-	nextToBuy *nexttobuy.Service
-	tags      *tags.Service
-	recs      *recommendations.Service
-	reports   *reports.Service
+	auth               *auth.Service
+	isbn               *isbn.Service
+	books              *books.Service
+	userBooks          *userbooks.Service
+	users              *users.Service
+	follows            *follows.Service
+	favorites          *favorites.Service
+	nextToBuy          *nexttobuy.Service
+	tags               *tags.Service
+	recs               *recommendations.Service
+	reports            *reports.Service
+	series             *series.Service
+	geminiAPIKey       string
+	geminiDefaultModel string
+	geminiPrompt       string
 }
 
 func New(
@@ -46,19 +52,27 @@ func New(
 	tagsService *tags.Service,
 	recsService *recommendations.Service,
 	reportsService *reports.Service,
+	seriesService *series.Service,
+	geminiAPIKey string,
+	geminiDefaultModel string,
+	geminiPrompt string,
 ) *Handler {
 	return &Handler{
-		auth:      authService,
-		isbn:      isbnService,
-		books:     bookService,
-		userBooks: userBookService,
-		users:     usersService,
-		follows:   followsService,
-		favorites: favoritesService,
-		nextToBuy: nextToBuyService,
-		tags:      tagsService,
-		recs:      recsService,
-		reports:   reportsService,
+		auth:               authService,
+		isbn:               isbnService,
+		books:              bookService,
+		userBooks:          userBookService,
+		users:              usersService,
+		follows:            followsService,
+		favorites:          favoritesService,
+		nextToBuy:          nextToBuyService,
+		tags:               tagsService,
+		recs:               recsService,
+		reports:            reportsService,
+		series:             seriesService,
+		geminiAPIKey:       geminiAPIKey,
+		geminiDefaultModel: geminiDefaultModel,
+		geminiPrompt:       geminiPrompt,
 	}
 }
 
@@ -228,52 +242,149 @@ func (h *Handler) IsbnLookup(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "isbn is required")
 		return
 	}
-	if book, ok := h.books.FindByISBN(isbnValue); ok {
-		writeJSON(w, http.StatusOK, map[string]any{
-			"id":            book.ID,
-			"isbn13":        book.ISBN13,
-			"title":         book.Title,
-			"authors":       book.Authors,
-			"publisher":     book.Publisher,
-			"publishedDate": book.PublishedDate,
-			"thumbnailUrl":  book.ThumbnailURL,
-			"source":        book.Source,
-		})
-		return
-	}
+	userID := userIDFromRequest(r)
+	settings := h.users.GetSettings(userID)
 
-	book, err := h.isbn.Lookup(isbnValue)
-	if err != nil {
-		if errors.Is(err, isbn.ErrNotFound) {
-			notFound(w)
+	var book domain.Book
+	seriesGuess := isbn.SeriesGuess{}
+	seriesSource := "simple"
+	isSeries := false
+	if existing, ok := h.books.FindByISBN(isbnValue); ok {
+		book = existing
+		if book.Title == "" {
+			book.Title = existing.Title
+		}
+		seriesGuess = isbn.InferSeries(book.Title, book.SeriesName)
+		isSeries = seriesGuess.Name != ""
+	} else {
+		fetched, guess, err := h.isbn.Lookup(isbnValue)
+		if err != nil {
+			if errors.Is(err, isbn.ErrNotFound) {
+				notFound(w)
+				return
+			}
+			internalError(w)
 			return
 		}
-		internalError(w)
-		return
-	}
-	created, err := h.books.Create(book)
-	if err != nil {
-		if errors.Is(err, books.ErrBookExists) {
-			if existing, ok := h.books.FindByISBN(isbnValue); ok {
-				created = existing
+		book = fetched
+		if cleaned := isbn.NormalizeTitle(book.Title); cleaned != "" {
+			book.Title = cleaned
+		}
+		seriesGuess = guess
+		isSeries = seriesGuess.Name != ""
+		created, err := h.books.Create(book)
+		if err != nil {
+			if errors.Is(err, books.ErrBookExists) {
+				if existing, ok := h.books.FindByISBN(isbnValue); ok {
+					book = existing
+				} else {
+					internalError(w)
+					return
+				}
 			} else {
 				internalError(w)
 				return
 			}
 		} else {
-			internalError(w)
-			return
+			book = created
+		}
+	}
+	if settings.GeminiEnabled {
+		apiKey := settings.GeminiAPIKey
+		if apiKey == "" {
+			apiKey = h.geminiAPIKey
+		}
+		model := settings.GeminiModel
+		if model == "" {
+			model = h.geminiDefaultModel
+		}
+		client := ai.NewGeminiClient(apiKey, model, h.geminiPrompt)
+		if guess, err := client.GuessSeries(r.Context(), ai.SeriesInput{
+			Title:         book.Title,
+			Authors:       book.Authors,
+			Publisher:     book.Publisher,
+			PublishedDate: book.PublishedDate,
+			ISBN13:        book.ISBN13,
+			SeriesName:    book.SeriesName,
+		}); err == nil {
+			if guess.IsSeries && strings.TrimSpace(guess.Name) != "" {
+				seriesGuess = isbn.SeriesGuess{
+					Name:         guess.Name,
+					VolumeNumber: guess.VolumeNumber,
+				}
+				seriesSource = "gemini"
+				isSeries = true
+			} else if !guess.IsSeries {
+				seriesGuess = isbn.SeriesGuess{}
+				seriesSource = "gemini"
+				isSeries = false
+			}
+		}
+	}
+	if seriesGuess.Name != "" {
+		normalizedName := isbn.NormalizeSeriesName(seriesGuess.Name)
+		seriesGuess.Name = normalizedName
+	}
+	if seriesGuess.Name == "" {
+		seriesGuess.VolumeNumber = 0
+		isSeries = false
+	}
+	if isSeries && seriesGuess.VolumeNumber == 0 {
+		inferred := isbn.InferSeries(book.Title, seriesGuess.Name)
+		if inferred.VolumeNumber > 0 {
+			seriesGuess.VolumeNumber = inferred.VolumeNumber
+		} else if book.SeriesName != "" {
+			inferred := isbn.InferSeries(book.Title, book.SeriesName)
+			if inferred.VolumeNumber > 0 {
+				seriesGuess.VolumeNumber = inferred.VolumeNumber
+			}
+		}
+	}
+	seriesID := ""
+	if seriesGuess.Name != "" {
+		if item, err := h.series.Ensure(seriesGuess.Name); err == nil {
+			seriesID = item.ID
+		}
+	}
+	if seriesGuess.VolumeNumber > 0 {
+		userItems := h.userBooks.ListByUser(userID)
+		var userBookID string
+		for _, item := range userItems {
+			if item.BookID == book.ID {
+				userBookID = item.ID
+				break
+			}
+		}
+		if userBookID == "" {
+			if created, err := h.userBooks.Create(userID, book.ID, "", ""); err == nil {
+				userBookID = created.ID
+			}
+		}
+		if userBookID != "" {
+			volume := seriesGuess.VolumeNumber
+			input := userbooks.UpdateInput{
+				VolumeNumber: &volume,
+			}
+			if seriesID != "" {
+				seriesIDCopy := seriesID
+				input.SeriesID = &seriesIDCopy
+			}
+			_, _ = h.userBooks.Update(userBookID, input)
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"id":            created.ID,
-		"isbn13":        created.ISBN13,
-		"title":         created.Title,
-		"authors":       created.Authors,
-		"publisher":     created.Publisher,
-		"publishedDate": created.PublishedDate,
-		"thumbnailUrl":  created.ThumbnailURL,
-		"source":        created.Source,
+		"id":            book.ID,
+		"isbn13":        book.ISBN13,
+		"title":         book.Title,
+		"authors":       book.Authors,
+		"publisher":     book.Publisher,
+		"publishedDate": book.PublishedDate,
+		"thumbnailUrl":  book.ThumbnailURL,
+		"source":        book.Source,
+		"seriesId":      seriesID,
+		"seriesName":    seriesGuess.Name,
+		"volumeNumber":  seriesGuess.VolumeNumber,
+		"seriesSource":  seriesSource,
 	})
 }
 
@@ -295,14 +406,31 @@ func (h *Handler) Books(w http.ResponseWriter, r *http.Request) {
 			badRequest(w, err.Error())
 			return
 		}
+		if req.IsSeries && strings.TrimSpace(req.SeriesName) == "" {
+			badRequest(w, "seriesName is required when isSeries is true")
+			return
+		}
+		if req.VolumeNumber != nil && *req.VolumeNumber <= 0 {
+			badRequest(w, "volumeNumber must be positive")
+			return
+		}
+		seriesName := ""
+		if req.IsSeries {
+			seriesName = isbn.NormalizeSeriesName(req.SeriesName)
+		}
+		title := strings.TrimSpace(req.Title)
+		if cleaned := isbn.NormalizeTitle(title); cleaned != "" {
+			title = cleaned
+		}
 		book, err := h.books.Create(domain.Book{
 			ISBN13:        isbn13,
-			Title:         req.Title,
+			Title:         title,
 			Authors:       req.Authors,
 			Publisher:     req.Publisher,
 			PublishedDate: req.PublishedDate,
 			ThumbnailURL:  req.ThumbnailURL,
 			Source:        req.Source,
+			SeriesName:    seriesName,
 		})
 		if err != nil {
 			if errors.Is(err, books.ErrBookExists) {
@@ -311,6 +439,31 @@ func (h *Handler) Books(w http.ResponseWriter, r *http.Request) {
 			}
 			internalError(w)
 			return
+		}
+		if req.IsSeries && seriesName != "" {
+			userID := userIDFromRequest(r)
+			seriesID := ""
+			if item, err := h.series.Ensure(seriesName); err == nil {
+				seriesID = item.ID
+			}
+			userBookID := ""
+			if created, err := h.userBooks.Create(userID, book.ID, "", ""); err == nil {
+				userBookID = created.ID
+			}
+			if userBookID != "" {
+				input := userbooks.UpdateInput{}
+				if seriesID != "" {
+					seriesIDCopy := seriesID
+					input.SeriesID = &seriesIDCopy
+				}
+				if req.VolumeNumber != nil {
+					volume := *req.VolumeNumber
+					input.VolumeNumber = &volume
+				}
+				if input.SeriesID != nil || input.VolumeNumber != nil {
+					_, _ = h.userBooks.Update(userBookID, input)
+				}
+			}
 		}
 		writeJSON(w, http.StatusOK, book)
 	default:
@@ -323,17 +476,29 @@ func (h *Handler) BookByID(w http.ResponseWriter, r *http.Request) {
 		notFound(w)
 		return
 	}
-	if r.Method != http.MethodGet {
-		methodNotAllowed(w, http.MethodGet)
-		return
-	}
-	if id, ok := pathID("/books/", r.URL.Path); ok {
-		if book, found := h.books.Get(id); found {
-			writeJSON(w, http.StatusOK, book)
+	switch r.Method {
+	case http.MethodGet:
+		if id, ok := pathID("/books/", r.URL.Path); ok {
+			if book, found := h.books.Get(id); found {
+				writeJSON(w, http.StatusOK, book)
+				return
+			}
+		}
+		notFound(w)
+	case http.MethodDelete:
+		id, ok := pathID("/books/", r.URL.Path)
+		if !ok {
+			notFound(w)
 			return
 		}
+		if !h.books.Delete(id) {
+			notFound(w)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	default:
+		methodNotAllowed(w, http.MethodGet, http.MethodDelete)
 	}
-	notFound(w)
 }
 
 func (h *Handler) UserBooks(w http.ResponseWriter, r *http.Request) {
@@ -483,7 +648,22 @@ func (h *Handler) UserSeriesOverride(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, updated)
 		return
 	}
-	notFound(w)
+	created, err := h.userBooks.Create(userID, req.BookID, "", "")
+	if err != nil {
+		internalError(w)
+		return
+	}
+	seriesID := req.SeriesID
+	volume := *req.VolumeNumber
+	updated, ok := h.userBooks.Update(created.ID, userbooks.UpdateInput{
+		SeriesID:     &seriesID,
+		VolumeNumber: &volume,
+	})
+	if !ok {
+		internalError(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, updated)
 }
 
 func (h *Handler) Favorites(w http.ResponseWriter, r *http.Request) {
@@ -868,18 +1048,22 @@ func (h *Handler) UsersByID(w http.ResponseWriter, r *http.Request) {
 	}
 	settings := h.users.GetSettings(userID)
 	ownedCount := len(h.userBooks.ListByUser(userID))
+	seriesCount := len(h.series.List())
 	writeJSON(w, http.StatusOK, map[string]any{
 		"user": map[string]string{
 			"id":       user.ID,
 			"email":    user.Email,
 			"username": user.Username,
 		},
-		"settings": map[string]string{
-			"visibility": settings.Visibility,
+		"settings": map[string]any{
+			"visibility":    settings.Visibility,
+			"geminiEnabled": settings.GeminiEnabled,
+			"geminiModel":   settings.GeminiModel,
+			"geminiHasKey":  settings.GeminiAPIKey != "",
 		},
 		"stats": map[string]int{
 			"ownedCount":  ownedCount,
-			"seriesCount": 0,
+			"seriesCount": seriesCount,
 			"followers":   h.follows.CountFollowers(userID),
 			"following":   h.follows.CountFollowing(userID),
 		},
@@ -932,18 +1116,20 @@ func (h *Handler) UsersMeSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Visibility string `json:"visibility"`
+		Visibility    string `json:"visibility"`
+		GeminiEnabled *bool  `json:"geminiEnabled"`
+		GeminiModel   string `json:"geminiModel"`
+		GeminiAPIKey  string `json:"geminiApiKey"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		badRequest(w, "invalid json")
 		return
 	}
 	if strings.TrimSpace(req.Visibility) == "" {
-		badRequest(w, "visibility is required")
-		return
+		req.Visibility = ""
 	}
 	userID := userIDFromRequest(r)
-	settings, err := h.users.UpdateSettings(userID, req.Visibility)
+	settings, err := h.users.UpdateSettings(userID, req.Visibility, req.GeminiEnabled, req.GeminiModel, req.GeminiAPIKey)
 	if err != nil {
 		if errors.Is(err, users.ErrInvalidVisibility) {
 			badRequest(w, "visibility must be public or followers")
@@ -953,8 +1139,11 @@ func (h *Handler) UsersMeSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"settings": map[string]string{
-			"visibility": settings.Visibility,
+		"settings": map[string]any{
+			"visibility":     settings.Visibility,
+			"geminiEnabled":  settings.GeminiEnabled,
+			"geminiModel":    settings.GeminiModel,
+			"geminiHasKey":   settings.GeminiAPIKey != "",
 		},
 	})
 }
@@ -1020,6 +1209,57 @@ func (h *Handler) BookReports(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
+func (h *Handler) Series(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		items := h.series.List()
+		writeJSON(w, http.StatusOK, map[string]any{
+			"items": items,
+		})
+	case http.MethodPost:
+		var req struct {
+			Name string `json:"name"`
+		}
+		if err := decodeJSON(r, &req); err != nil {
+			badRequest(w, "invalid json")
+			return
+		}
+		if strings.TrimSpace(req.Name) == "" {
+			badRequest(w, "name is required")
+			return
+		}
+		item, err := h.series.Create(req.Name)
+		if err != nil {
+			if errors.Is(err, series.ErrSeriesExists) {
+				conflict(w, "series already exists")
+				return
+			}
+			internalError(w)
+			return
+		}
+		writeJSON(w, http.StatusOK, item)
+	default:
+		methodNotAllowed(w, http.MethodGet, http.MethodPost)
+	}
+}
+
+func (h *Handler) SeriesByID(w http.ResponseWriter, r *http.Request) {
+	if _, ok := pathID("/series/", r.URL.Path); !ok {
+		notFound(w)
+		return
+	}
+	if r.Method != http.MethodDelete {
+		methodNotAllowed(w, http.MethodDelete)
+		return
+	}
+	id, _ := pathID("/series/", r.URL.Path)
+	if !h.series.Delete(id) {
+		notFound(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
 func pathID(prefix, path string) (string, bool) {
 	if !strings.HasPrefix(path, prefix) {
 		return "", false
@@ -1070,6 +1310,9 @@ type bookRequest struct {
 	PublishedDate string   `json:"publishedDate"`
 	ThumbnailURL  string   `json:"thumbnailUrl"`
 	Source        string   `json:"source"`
+	IsSeries      bool     `json:"isSeries"`
+	SeriesName    string   `json:"seriesName"`
+	VolumeNumber  *int     `json:"volumeNumber"`
 }
 
 func normalizeISBN13(value string) string {

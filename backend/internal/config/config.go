@@ -19,6 +19,8 @@ type Config struct {
 	SMTPPass            string
 	SMTPFrom            string
 	CORSAllowedOrigins  string
+	GeminiAPIKey        string
+	GeminiDefaultModel  string
 }
 
 func Load() Config {
@@ -36,6 +38,8 @@ func Load() Config {
 		SMTPPass:            getEnv("SMTP_PASS", ""),
 		SMTPFrom:            getEnv("SMTP_FROM", ""),
 		CORSAllowedOrigins:  getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3000"),
+		GeminiAPIKey:        getEnv("GEMINI_API_KEY", ""),
+		GeminiDefaultModel:  getEnv("GEMINI_DEFAULT_MODEL", "gemini-1.5-flash"),
 	}
 }
 

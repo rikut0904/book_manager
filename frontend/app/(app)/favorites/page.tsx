@@ -26,6 +26,7 @@ export default function FavoritesPage() {
   });
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [books, setBooks] = useState<Book[]>([]);
+  const [series, setSeries] = useState<{ id: string; name: string }[]>([]);
 
   const loadFavorites = () => {
     let isMounted = true;
@@ -50,6 +51,28 @@ export default function FavoritesPage() {
   useEffect(() => {
     const cleanup = loadFavorites();
     return () => cleanup();
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchJSON<{ items: { id: string; name: string }[] }>("/series", {
+      auth: true,
+    })
+      .then((data) => {
+        if (!isMounted) {
+          return;
+        }
+        setSeries(data.items ?? []);
+      })
+      .catch(() => {
+        if (!isMounted) {
+          return;
+        }
+        setSeries([]);
+      });
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -158,17 +181,20 @@ export default function FavoritesPage() {
                 ))}
               </select>
             ) : (
-              <input
+              <select
                 className="mt-2 w-full rounded-2xl border border-[#e4d8c7] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c86b3c]"
-                placeholder="series_1"
                 value={form.seriesId}
                 onChange={(event) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    seriesId: event.target.value,
-                  }))
+                  setForm((prev) => ({ ...prev, seriesId: event.target.value }))
                 }
-              />
+              >
+                <option value="">シリーズを選択</option>
+                {series.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
             )}
             <input
               className="mt-2 w-full rounded-2xl border border-[#e4d8c7] bg-white px-4 py-2 text-xs outline-none transition focus:border-[#c86b3c]"

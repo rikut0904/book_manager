@@ -16,6 +16,9 @@ type User struct {
 type ProfileSettings struct {
 	UserID     string `gorm:"primaryKey"`
 	Visibility string
+	GeminiEnabled bool
+	GeminiModel string
+	GeminiAPIKey string
 }
 
 type Book struct {
@@ -27,6 +30,7 @@ type Book struct {
 	PublishedDate string
 	ThumbnailURL  string
 	Source        string
+	SeriesName    string
 }
 
 type UserBook struct {
@@ -66,6 +70,12 @@ type BookTag struct {
 	UserID string `gorm:"primaryKey"`
 	BookID string `gorm:"primaryKey"`
 	TagID  string `gorm:"primaryKey"`
+}
+
+type Series struct {
+	ID             string `gorm:"primaryKey"`
+	Name           string
+	NormalizedName string `gorm:"uniqueIndex"`
 }
 
 type Recommendation struct {

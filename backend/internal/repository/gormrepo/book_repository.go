@@ -33,6 +33,7 @@ func (r *BookRepository) Create(book domain.Book) error {
 		PublishedDate: book.PublishedDate,
 		ThumbnailURL:  book.ThumbnailURL,
 		Source:        book.Source,
+		SeriesName:    book.SeriesName,
 	}
 	if err := r.db.Create(&model).Error; err != nil {
 		if isUniqueViolation(err) {
@@ -71,6 +72,14 @@ func (r *BookRepository) List() []domain.Book {
 	return items
 }
 
+func (r *BookRepository) Delete(id string) bool {
+	result := r.db.Delete(&Book{}, "id = ?", id)
+	if result.Error != nil {
+		return false
+	}
+	return result.RowsAffected > 0
+}
+
 func modelToDomainBook(model Book) domain.Book {
 	isbn := ""
 	if model.ISBN13 != nil {
@@ -85,6 +94,7 @@ func modelToDomainBook(model Book) domain.Book {
 		PublishedDate: model.PublishedDate,
 		ThumbnailURL:  model.ThumbnailURL,
 		Source:        model.Source,
+		SeriesName:    model.SeriesName,
 	}
 }
 

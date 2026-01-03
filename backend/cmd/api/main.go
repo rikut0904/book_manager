@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 	"book_manager/backend/internal/repository"
 	"book_manager/backend/internal/repository/gormrepo"
 	"book_manager/backend/internal/router"
+	"book_manager/backend/internal/series"
 	"book_manager/backend/internal/tags"
 	"book_manager/backend/internal/userbooks"
 	"book_manager/backend/internal/users"
@@ -35,6 +37,7 @@ func main() {
 	_ = godotenv.Load("../.env")
 
 	cfg := config.Load()
+	geminiPrompt := loadPrompt("prompt.md")
 	var (
 		userRepo           repository.UserRepository
 		bookRepo           repository.BookRepository
@@ -47,6 +50,7 @@ func main() {
 		recommendationRepo repository.RecommendationRepository
 		isbnCacheRepo      repository.IsbnCacheRepository
 		auditLogRepo       repository.AuditLogRepository
+		seriesRepo         repository.SeriesRepository
 	)
 
 	if cfg.DatabaseURL != "" {
@@ -66,6 +70,7 @@ func main() {
 			&gormrepo.Recommendation{},
 			&gormrepo.IsbnCache{},
 			&gormrepo.AuditLog{},
+			&gormrepo.Series{},
 		); err != nil {
 			log.Fatalf("db migrate error: %v", err)
 		}
@@ -80,6 +85,7 @@ func main() {
 		recommendationRepo = gormrepo.NewRecommendationRepository(dbConn)
 		isbnCacheRepo = gormrepo.NewIsbnCacheRepository(dbConn)
 		auditLogRepo = gormrepo.NewAuditLogRepository(dbConn)
+		seriesRepo = gormrepo.NewSeriesRepository(dbConn)
 	} else {
 		userRepo = repository.NewMemoryUserRepository()
 		bookRepo = repository.NewMemoryBookRepository()
@@ -92,6 +98,7 @@ func main() {
 		recommendationRepo = repository.NewMemoryRecommendationRepository()
 		isbnCacheRepo = repository.NewMemoryIsbnCacheRepository()
 		auditLogRepo = repository.NewMemoryAuditLogRepository()
+		seriesRepo = repository.NewMemorySeriesRepository()
 	}
 	authService := auth.NewService(userRepo)
 	isbnCacheTTL := time.Duration(cfg.IsbnCacheTTLMinutes) * time.Minute
@@ -111,7 +118,11 @@ func main() {
 		Pass: cfg.SMTPPass,
 		From: cfg.SMTPFrom,
 	})
+	seriesService := series.NewService(seriesRepo)
 	_ = authService.SeedUser("user_demo", "demo@book.local", "demo", "password")
+	if count := seriesService.NormalizeAll(); count > 0 {
+		log.Printf("normalized %d series names", count)
+	}
 	h := handler.New(
 		authService,
 		isbnService,
@@ -124,6 +135,10 @@ func main() {
 		tagsService,
 		recsService,
 		reportsService,
+		seriesService,
+		cfg.GeminiAPIKey,
+		cfg.GeminiDefaultModel,
+		geminiPrompt,
 	)
 	r := router.New(h, auditLogRepo, cfg.CORSAllowedOrigins)
 
@@ -153,6 +168,15 @@ func main() {
 	if err := server.Shutdown(ctx); err != nil {
 		log.Printf("shutdown error: %v", err)
 	}
+}
+
+func loadPrompt(path string) string {
+	data, err := os.ReadFile(filepath.Clean(path))
+	if err != nil {
+		log.Printf("prompt load error: %v", err)
+		return ""
+	}
+	return string(data)
 }
 
 func startAuditCleanup(repo repository.AuditLogRepository) {

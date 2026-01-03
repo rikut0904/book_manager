@@ -68,3 +68,24 @@ func (r *MemoryBookRepository) List() []domain.Book {
 	}
 	return books
 }
+
+func (r *MemoryBookRepository) Delete(id string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	book, ok := r.byID[id]
+	if !ok {
+		return false
+	}
+	delete(r.byID, id)
+	if book.ISBN13 != "" {
+		delete(r.byISBN, book.ISBN13)
+	}
+	for i, storedID := range r.ordered {
+		if storedID == id {
+			r.ordered = append(r.ordered[:i], r.ordered[i+1:]...)
+			break
+		}
+	}
+	return true
+}

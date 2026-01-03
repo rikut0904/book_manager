@@ -31,6 +31,9 @@ go run ./cmd/api
 ## 監査ログ
 - 全APIのリクエストを `audit_logs` に記録し、90日経過分を削除します
 
+## シリーズ
+- `/series` でシリーズマスタの一覧取得・作成ができます
+
 ## 環境変数
 - `PORT`: APIのポート（default: 8080）
 - `APP_ENV`: 実行環境名（default: local）

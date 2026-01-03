@@ -13,6 +13,9 @@ type LookupResult = {
   publishedDate: string;
   thumbnailUrl: string;
   source: string;
+  seriesId: string;
+  seriesName: string;
+  volumeNumber: number;
 };
 
 export default function BookNewPage() {
@@ -25,6 +28,9 @@ export default function BookNewPage() {
     title: "",
     authors: "",
     isbn13: "",
+    isSeries: false,
+    seriesName: "",
+    volumeNumber: "",
   });
 
   const handleLookup = async () => {
@@ -53,6 +59,16 @@ export default function BookNewPage() {
       return;
     }
     try {
+      const volumeValue = manualForm.volumeNumber.trim();
+      const volumeNumber = volumeValue ? Number(volumeValue) : null;
+      if (manualForm.isSeries && !manualForm.seriesName.trim()) {
+        setManualError("シリーズ名を入力してください。");
+        return;
+      }
+      if (volumeValue && (!Number.isFinite(volumeNumber) || volumeNumber <= 0)) {
+        setManualError("巻数は正の数値で入力してください。");
+        return;
+      }
       const data = await fetchJSON<LookupResult>("/books", {
         method: "POST",
         auth: true,
@@ -63,10 +79,20 @@ export default function BookNewPage() {
             .map((item) => item.trim())
             .filter(Boolean),
           isbn13: manualForm.isbn13.trim(),
+          isSeries: manualForm.isSeries,
+          seriesName: manualForm.isSeries ? manualForm.seriesName.trim() : "",
+          volumeNumber: manualForm.isSeries && volumeNumber ? volumeNumber : undefined,
         }),
       });
       setManualSuccess(`登録しました: ${data.title}`);
-      setManualForm({ title: "", authors: "", isbn13: "" });
+      setManualForm({
+        title: "",
+        authors: "",
+        isbn13: "",
+        isSeries: false,
+        seriesName: "",
+        volumeNumber: "",
+      });
     } catch {
       setManualError("手動登録に失敗しました。");
     }
@@ -113,10 +139,17 @@ export default function BookNewPage() {
             {result ? (
               <>
                 <p className="mt-2">タイトル: {result.title}</p>
+                <p>
+                  巻数: {result.volumeNumber ? `Vol.${result.volumeNumber}` : "未判定"}
+                </p>
                 <p>著者: {result.authors?.join(" / ") || "未登録"}</p>
                 <p>
                   出版社: {result.publisher || "未登録"} /{" "}
                   {result.publishedDate || "未登録"}
+                </p>
+                <p>
+                  シリーズ: {result.seriesName || "未判定"}{" "}
+                  {result.volumeNumber ? `Vol.${result.volumeNumber}` : ""}
                 </p>
                 <p className="mt-2 text-xs text-[#c86b3c]">
                   登録ID: {result.id}
@@ -171,6 +204,50 @@ export default function BookNewPage() {
                 }
               />
             </label>
+            <label className="flex items-center justify-between rounded-2xl border border-[#e4d8c7] bg-white px-4 py-3 text-sm">
+              <span>シリーズ作品</span>
+              <input
+                type="checkbox"
+                checked={manualForm.isSeries}
+                onChange={(event) =>
+                  setManualForm((prev) => ({
+                    ...prev,
+                    isSeries: event.target.checked,
+                  }))
+                }
+              />
+            </label>
+            {manualForm.isSeries ? (
+              <>
+                <label className="text-[#1b1c1f]">
+                  シリーズ名
+                  <input
+                    className="mt-2 w-full rounded-2xl border border-[#e4d8c7] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c86b3c]"
+                    value={manualForm.seriesName}
+                    onChange={(event) =>
+                      setManualForm((prev) => ({
+                        ...prev,
+                        seriesName: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <label className="text-[#1b1c1f]">
+                  巻数
+                  <input
+                    className="mt-2 w-full rounded-2xl border border-[#e4d8c7] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c86b3c]"
+                    value={manualForm.volumeNumber}
+                    onChange={(event) =>
+                      setManualForm((prev) => ({
+                        ...prev,
+                        volumeNumber: event.target.value,
+                      }))
+                    }
+                    placeholder="例: 3"
+                  />
+                </label>
+              </>
+            ) : null}
             {manualError ? (
               <p className="text-xs text-red-600">{manualError}</p>
             ) : null}

@@ -7,4 +7,5 @@ type BookRepository interface {
 	FindByID(id string) (domain.Book, bool)
 	FindByISBN(isbn string) (domain.Book, bool)
 	List() []domain.Book
+	Delete(id string) bool
 }

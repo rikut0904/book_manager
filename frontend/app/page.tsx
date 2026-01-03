@@ -95,6 +95,18 @@ export default function Home() {
                 手入力のメモもまとめて管理。買い忘れ防止。
               </p>
             </div>
+            <div className="rounded-2xl border border-[#e4d8c7] bg-white/70 p-5 shadow-sm md:col-span-2">
+              <p className="text-xs text-[#c86b3c]">AIシリーズ推定</p>
+              <p className="mt-2 text-sm text-[#5c5d63]">
+                シリーズ推定にGemini APIを利用します。設定画面から同意のうえ有効化できます。
+              </p>
+              <Link
+                className="mt-3 inline-flex text-xs text-[#c86b3c] hover:text-[#8f3d1f]"
+                href="/settings/ai"
+              >
+                AI設定を開く
+              </Link>
+            </div>
           </div>
         </section>
 

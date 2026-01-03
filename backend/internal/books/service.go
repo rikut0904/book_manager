@@ -48,6 +48,10 @@ func (s *Service) FindByISBN(isbn string) (domain.Book, bool) {
 	return s.books.FindByISBN(isbn)
 }
 
+func (s *Service) Delete(id string) bool {
+	return s.books.Delete(id)
+}
+
 func newID() string {
 	seed := make([]byte, 16)
 	if _, err := rand.Read(seed); err != nil {

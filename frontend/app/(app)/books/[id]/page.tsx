@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { fetchJSON } from "@/lib/api";
@@ -21,6 +21,16 @@ type Tag = {
   name: string;
 };
 
+type Series = {
+  id: string;
+  name: string;
+};
+
+type SeriesGuess = {
+  seriesName: string;
+  volumeNumber: number;
+};
+
 export default function BookDetailPage() {
   const params = useParams<{ id: string }>();
   const [book, setBook] = useState<Book | null>(null);
@@ -29,8 +39,14 @@ export default function BookDetailPage() {
   const [tagId, setTagId] = useState("");
   const [tagMessage, setTagMessage] = useState<string | null>(null);
   const [seriesId, setSeriesId] = useState("");
+  const [seriesList, setSeriesList] = useState<Series[]>([]);
   const [volumeNumber, setVolumeNumber] = useState("");
   const [seriesMessage, setSeriesMessage] = useState<string | null>(null);
+  const [seriesGuess, setSeriesGuess] = useState<SeriesGuess | null>(null);
+  const [deleteMessage, setDeleteMessage] = useState<string | null>(null);
+  const manualSeriesName =
+    seriesList.find((item) => item.id === seriesId)?.name || seriesId;
+  const router = useRouter();
 
   useEffect(() => {
     if (!params?.id) {
@@ -56,6 +72,35 @@ export default function BookDetailPage() {
   }, [params?.id]);
 
   useEffect(() => {
+    if (!book?.isbn13) {
+      return;
+    }
+    let isMounted = true;
+    fetchJSON<{
+      seriesName: string;
+      volumeNumber: number;
+    }>(`/isbn/lookup?isbn=${encodeURIComponent(book.isbn13)}`, { auth: true })
+      .then((data) => {
+        if (!isMounted) {
+          return;
+        }
+        setSeriesGuess({
+          seriesName: data.seriesName,
+          volumeNumber: data.volumeNumber,
+        });
+      })
+      .catch(() => {
+        if (!isMounted) {
+          return;
+        }
+        setSeriesGuess(null);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [book?.isbn13]);
+
+  useEffect(() => {
     let isMounted = true;
     fetchJSON<{ items: Tag[] }>("/tags", { auth: true })
       .then((data) => {
@@ -69,6 +114,26 @@ export default function BookDetailPage() {
           return;
         }
         setTags([]);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchJSON<{ items: Series[] }>("/series", { auth: true })
+      .then((data) => {
+        if (!isMounted) {
+          return;
+        }
+        setSeriesList(data.items ?? []);
+      })
+      .catch(() => {
+        if (!isMounted) {
+          return;
+        }
+        setSeriesList([]);
       });
     return () => {
       isMounted = false;
@@ -148,6 +213,27 @@ export default function BookDetailPage() {
     }
   };
 
+  const handleDeleteBook = async () => {
+    setDeleteMessage(null);
+    if (!params?.id) {
+      return;
+    }
+    if (!window.confirm("この書籍を削除しますか？")) {
+      return;
+    }
+    try {
+      await fetchJSON(`/books/${params.id}`, {
+        method: "DELETE",
+        auth: true,
+      });
+      router.push("/books");
+    } catch {
+      setDeleteMessage("書籍の削除に失敗しました。");
+    }
+  };
+
+  const displayVolume = seriesGuess?.volumeNumber || 0;
+
   return (
     <div className="flex flex-col gap-6">
       <section className="rounded-3xl border border-[#e4d8c7] bg-white/80 p-6 shadow-sm">
@@ -156,9 +242,16 @@ export default function BookDetailPage() {
             <p className="text-xs uppercase tracking-[0.3em] text-[#c86b3c]">
               Book Detail
             </p>
-            <h1 className="mt-2 font-[var(--font-display)] text-3xl">
-              {book?.title || "書籍"}
-            </h1>
+            <div className="mt-2 flex items-baseline gap-3">
+              <h1 className="font-[var(--font-display)] text-3xl">
+                {book?.title || "書籍"}
+              </h1>
+              {displayVolume ? (
+                <span className="text-sm text-[#5c5d63]">
+                  Vol.{displayVolume}
+                </span>
+              ) : null}
+            </div>
             <p className="mt-1 text-sm text-[#5c5d63]">
               {book?.authors?.join(" / ") || "著者未登録"}
             </p>
@@ -172,6 +265,9 @@ export default function BookDetailPage() {
         </div>
         {error ? (
           <p className="mt-4 text-sm text-red-600">{error}</p>
+        ) : null}
+        {deleteMessage ? (
+          <p className="mt-4 text-sm text-red-600">{deleteMessage}</p>
         ) : null}
         <div className="mt-6 grid gap-4 md:grid-cols-3">
           <div className="rounded-2xl border border-[#e4d8c7] bg-white/70 p-4 text-sm text-[#5c5d63]">
@@ -191,6 +287,15 @@ export default function BookDetailPage() {
             <p className="mt-2 text-[#1b1c1f]">サイン本</p>
           </div>
         </div>
+        <div className="mt-6 flex justify-end">
+          <button
+            className="rounded-full border border-[#e4d8c7] px-4 py-2 text-xs text-[#c86b3c] hover:bg-white"
+            type="button"
+            onClick={handleDeleteBook}
+          >
+            書籍を削除
+          </button>
+        </div>
       </section>
 
       <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
@@ -203,14 +308,41 @@ export default function BookDetailPage() {
           </p>
           <div className="mt-4 rounded-2xl border border-[#e4d8c7] bg-white p-4 text-sm text-[#5c5d63]">
             <div className="flex items-center justify-between">
-              <span className="text-[#1b1c1f]">星街メトロ</span>
-              <span>Vol.4</span>
+              <span className="text-[#1b1c1f]">
+                {seriesId
+                  ? manualSeriesName || "未判定"
+                  : seriesGuess?.seriesName || "未判定"}
+              </span>
+              <span>
+                {seriesId && volumeNumber
+                  ? `Vol.${volumeNumber}`
+                  : seriesGuess?.volumeNumber
+                  ? `Vol.${seriesGuess.volumeNumber}`
+                  : "--"}
+              </span>
             </div>
-            <p className="mt-2 text-xs text-[#c86b3c]">自動判定: 信頼度 86%</p>
+            <p className="mt-2 text-xs text-[#c86b3c]">
+              {seriesId ? "手動入力" : "自動判定"}
+            </p>
           </div>
           <div className="mt-4 grid gap-3 text-sm">
             <label className="text-[#1b1c1f]">
               シリーズ名
+              <select
+                className="mt-2 w-full rounded-2xl border border-[#e4d8c7] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c86b3c]"
+                value={seriesId}
+                onChange={(event) => setSeriesId(event.target.value)}
+              >
+                <option value="">シリーズを選択</option>
+                {seriesList.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-[#1b1c1f]">
+              seriesId（直接入力）
               <input
                 className="mt-2 w-full rounded-2xl border border-[#e4d8c7] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c86b3c]"
                 value={seriesId}

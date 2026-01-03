@@ -9,4 +9,5 @@ type Book struct {
 	PublishedDate string   `json:"publishedDate"`
 	ThumbnailURL  string   `json:"thumbnailUrl"`
 	Source        string   `json:"source"`
+	SeriesName    string   `json:"seriesName"`
 }

@@ -52,6 +52,9 @@ func New(
 
 	mux.HandleFunc("/book-reports", h.BookReports)
 
+	mux.HandleFunc("/series", h.Series)
+	mux.HandleFunc("/series/", h.SeriesByID)
+
 	handlerWithAudit := AuditMiddleware(auditRepo, mux)
 	return CORSMiddleware(allowedOrigins, handlerWithAudit)
 }

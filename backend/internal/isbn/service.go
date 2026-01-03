@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
+	"strings"
 	"time"
 
 	"book_manager/backend/internal/domain"
@@ -23,6 +25,11 @@ type Service struct {
 	cache   repository.IsbnCacheRepository
 }
 
+type SeriesGuess struct {
+	Name         string
+	VolumeNumber int
+}
+
 func NewService(baseURL, apiKey string, ttl time.Duration, cache repository.IsbnCacheRepository) *Service {
 	return &Service{
 		client: &http.Client{
@@ -35,17 +42,19 @@ func NewService(baseURL, apiKey string, ttl time.Duration, cache repository.Isbn
 	}
 }
 
-func (s *Service) Lookup(isbn string) (domain.Book, error) {
+func (s *Service) Lookup(isbn string) (domain.Book, SeriesGuess, error) {
 	if book, ok := s.fromCache(isbn); ok {
-		return book, nil
+		series := inferSeries(book.Title, book.SeriesName)
+		return book, series, nil
 	}
 
 	book, err := s.fetchGoogleBooks(isbn)
 	if err != nil {
-		return domain.Book{}, err
+		return domain.Book{}, SeriesGuess{}, err
 	}
 	s.storeCache(isbn, book)
-	return book, nil
+	series := inferSeries(book.Title, book.SeriesName)
+	return book, series, nil
 }
 
 func (s *Service) fromCache(isbn string) (domain.Book, bool) {
@@ -113,6 +122,7 @@ func (s *Service) fetchGoogleBooks(isbn string) (domain.Book, error) {
 		PublishedDate: item.VolumeInfo.PublishedDate,
 		ThumbnailURL:  item.VolumeInfo.ImageLinks.Thumbnail,
 		Source:        "google",
+		SeriesName:    item.VolumeInfo.Series,
 	}
 	return book, nil
 }
@@ -142,6 +152,7 @@ type googleBooksVolume struct {
 	PublishedDate       string                `json:"publishedDate"`
 	IndustryIdentifiers []industryIdentifier  `json:"industryIdentifiers"`
 	ImageLinks          googleBooksImageLinks `json:"imageLinks"`
+	Series              string                `json:"series"`
 }
 
 type industryIdentifier struct {
@@ -151,4 +162,85 @@ type industryIdentifier struct {
 
 type googleBooksImageLinks struct {
 	Thumbnail string `json:"thumbnail"`
+}
+
+var (
+	volumePattern         = regexp.MustCompile(`(?i)(?:第?\s*([0-9０-９]+)\s*(?:巻|冊|話)|vol\.?\s*([0-9０-９]+))`)
+	trailingNumberPattern = regexp.MustCompile(`\s*([0-9０-９]+)\s*$`)
+	bracketPattern = regexp.MustCompile(`【[^】]+】`)
+	parenPattern = regexp.MustCompile(`[（(][^)）]+[)）]`)
+)
+
+func inferSeries(title, seriesName string) SeriesGuess {
+	guess := SeriesGuess{
+		Name:         strings.TrimSpace(seriesName),
+		VolumeNumber: 0,
+	}
+	if title == "" {
+		return guess
+	}
+	matches := volumePattern.FindStringSubmatch(title)
+	if len(matches) > 0 {
+		if matches[1] != "" {
+			guess.VolumeNumber = toInt(matches[1])
+		} else if matches[2] != "" {
+			guess.VolumeNumber = toInt(matches[2])
+		}
+	}
+	if guess.VolumeNumber == 0 {
+		if match := trailingNumberPattern.FindStringSubmatch(title); len(match) > 1 {
+			guess.VolumeNumber = toInt(match[1])
+		}
+	}
+	if guess.Name == "" {
+		guess.Name = strings.TrimSpace(volumePattern.ReplaceAllString(title, ""))
+		guess.Name = strings.Trim(guess.Name, " -‐–—・")
+	}
+	return guess
+}
+
+func InferSeries(title, seriesName string) SeriesGuess {
+	return inferSeries(title, seriesName)
+}
+
+func NormalizeSeriesName(name string) string {
+	cleaned := strings.TrimSpace(name)
+	if cleaned == "" {
+		return ""
+	}
+	cleaned = bracketPattern.ReplaceAllString(cleaned, "")
+	cleaned = parenPattern.ReplaceAllString(cleaned, "")
+	cleaned = volumePattern.ReplaceAllString(cleaned, "")
+	cleaned = trailingNumberPattern.ReplaceAllString(cleaned, "")
+	cleaned = strings.TrimSpace(cleaned)
+	cleaned = strings.Trim(cleaned, " -‐–—・")
+	return strings.TrimSpace(cleaned)
+}
+
+func NormalizeTitle(title string) string {
+	cleaned := strings.TrimSpace(title)
+	if cleaned == "" {
+		return ""
+	}
+	cleaned = bracketPattern.ReplaceAllString(cleaned, "")
+	cleaned = parenPattern.ReplaceAllString(cleaned, "")
+	cleaned = volumePattern.ReplaceAllString(cleaned, "")
+	cleaned = trailingNumberPattern.ReplaceAllString(cleaned, "")
+	cleaned = strings.TrimSpace(cleaned)
+	cleaned = strings.Trim(cleaned, " -‐–—・")
+	return strings.TrimSpace(cleaned)
+}
+
+func toInt(value string) int {
+	n := 0
+	for _, r := range value {
+		if r >= '０' && r <= '９' {
+			r = r - '０' + '0'
+		}
+		if r < '0' || r > '9' {
+			continue
+		}
+		n = n*10 + int(r-'0')
+	}
+	return n
 }
