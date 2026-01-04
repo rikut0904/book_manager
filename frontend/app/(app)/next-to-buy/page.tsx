@@ -10,6 +10,7 @@ type NextToBuyItem = {
   seriesName: string;
   volumeNumber: number;
   note: string;
+  source?: "manual" | "auto";
 };
 
 export default function NextToBuyPage() {
@@ -126,13 +127,15 @@ export default function NextToBuyPage() {
               {item.volumeNumber ? `Vol.${item.volumeNumber}` : ""}
             </p>
             <p className="mt-2 text-sm text-[#5c5d63]">{item.note}</p>
-            <button
-              className="mt-4 rounded-full border border-[#e4d8c7] px-4 py-2 text-xs text-[#5c5d63] hover:bg-white"
-              type="button"
-              onClick={() => handleDelete(item.id)}
-            >
-              削除
-            </button>
+            {item.source !== "auto" ? (
+              <button
+                className="mt-4 rounded-full border border-[#e4d8c7] px-4 py-2 text-xs text-[#5c5d63] hover:bg-white"
+                type="button"
+                onClick={() => handleDelete(item.id)}
+              >
+                削除
+              </button>
+            ) : null}
           </div>
         ))}
       </section>

@@ -80,6 +80,10 @@ func (s *Service) RemoveBookTag(userID, bookID, tagID string) bool {
 	})
 }
 
+func (s *Service) ListBookTagsByUser(userID string) []domain.BookTag {
+	return s.bookTags.ListByUser(userID)
+}
+
 func newID() string {
 	seed := make([]byte, 16)
 	if _, err := rand.Read(seed); err != nil {

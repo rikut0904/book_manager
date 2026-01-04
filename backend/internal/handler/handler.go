@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -526,6 +527,15 @@ func (h *Handler) UserBooks(w http.ResponseWriter, r *http.Request) {
 			userID = userIDFromRequest(r)
 		}
 		bookID := strings.TrimSpace(r.URL.Query().Get("bookId"))
+		query := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("query")))
+		tagID := strings.TrimSpace(r.URL.Query().Get("tag"))
+		seriesID := strings.TrimSpace(r.URL.Query().Get("series"))
+		page := 1
+		if value := strings.TrimSpace(r.URL.Query().Get("page")); value != "" {
+			if parsed, err := strconv.Atoi(value); err == nil && parsed > 0 {
+				page = parsed
+			}
+		}
 		items := h.userBooks.ListByUser(userID)
 		if bookID != "" {
 			filtered := items[:0]
@@ -535,6 +545,60 @@ func (h *Handler) UserBooks(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			items = filtered
+		}
+		if seriesID != "" {
+			filtered := items[:0]
+			for _, item := range items {
+				if item.SeriesID == seriesID {
+					filtered = append(filtered, item)
+				}
+			}
+			items = filtered
+		}
+		if tagID != "" {
+			tagged := make(map[string]struct{})
+			for _, tag := range h.tags.ListBookTagsByUser(userID) {
+				if tag.TagID == tagID {
+					tagged[tag.BookID] = struct{}{}
+				}
+			}
+			filtered := items[:0]
+			for _, item := range items {
+				if _, ok := tagged[item.BookID]; ok {
+					filtered = append(filtered, item)
+				}
+			}
+			items = filtered
+		}
+		if query != "" {
+			booksByID := make(map[string]domain.Book)
+			for _, book := range h.books.List() {
+				booksByID[book.ID] = book
+			}
+			filtered := items[:0]
+			for _, item := range items {
+				book, ok := booksByID[item.BookID]
+				if !ok {
+					continue
+				}
+				if strings.Contains(strings.ToLower(book.Title), query) ||
+					strings.Contains(strings.ToLower(book.ISBN13), query) ||
+					containsAuthor(book.Authors, query) {
+					filtered = append(filtered, item)
+				}
+			}
+			items = filtered
+		}
+		const pageSize = 20
+		start := (page - 1) * pageSize
+		if start < len(items) {
+			end := start + pageSize
+			if end > len(items) {
+				end = len(items)
+			}
+			items = items[start:end]
+		} else if len(items) > 0 {
+			items = []domain.UserBook{}
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
 			"items": items,
@@ -771,7 +835,49 @@ func (h *Handler) NextToBuy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userID := userIDFromRequest(r)
-	items := h.nextToBuy.ListByUser(userID)
+	manualItems := h.nextToBuy.ListByUser(userID)
+	items := make([]map[string]any, 0, len(manualItems))
+	for _, item := range manualItems {
+		items = append(items, map[string]any{
+			"id":           item.ID,
+			"title":        item.Title,
+			"seriesName":   item.SeriesName,
+			"volumeNumber": item.VolumeNumber,
+			"note":         item.Note,
+			"source":       "manual",
+		})
+	}
+	seriesMap := make(map[string]string)
+	for _, series := range h.series.List() {
+		seriesMap[series.ID] = series.Name
+	}
+	maxBySeries := make(map[string]int)
+	for _, item := range h.userBooks.ListByUser(userID) {
+		if item.SeriesID == "" || item.VolumeNumber <= 0 {
+			continue
+		}
+		if item.VolumeNumber > maxBySeries[item.SeriesID] {
+			maxBySeries[item.SeriesID] = item.VolumeNumber
+		}
+	}
+	for _, fav := range h.favorites.ListByUser(userID) {
+		if fav.Type != "series" || fav.SeriesID == "" {
+			continue
+		}
+		name := seriesMap[fav.SeriesID]
+		nextVolume := maxBySeries[fav.SeriesID] + 1
+		if nextVolume == 1 {
+			nextVolume = 1
+		}
+		items = append(items, map[string]any{
+			"id":           "auto:" + fav.SeriesID,
+			"title":        name,
+			"seriesName":   name,
+			"volumeNumber": nextVolume,
+			"note":         "お気に入りから自動提案",
+			"source":       "auto",
+		})
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"items": items,
 	})
@@ -1128,6 +1234,11 @@ func (h *Handler) UsersMe(w http.ResponseWriter, r *http.Request) {
 		})
 	case http.MethodDelete:
 		userID := userIDFromRequest(r)
+		for _, item := range h.recs.List() {
+			if item.UserID == userID {
+				h.recs.Delete(item.ID)
+			}
+		}
 		if !h.users.Delete(userID) {
 			notFound(w)
 			return
@@ -1524,4 +1635,16 @@ func isValidEmail(value string) bool {
 		return false
 	}
 	return strings.Contains(parts[1], ".")
+}
+
+func containsAuthor(authors []string, query string) bool {
+	if query == "" {
+		return false
+	}
+	for _, author := range authors {
+		if strings.Contains(strings.ToLower(author), query) {
+			return true
+		}
+	}
+	return false
 }

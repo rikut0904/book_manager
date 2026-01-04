@@ -31,6 +31,12 @@ type SeriesGuess = {
   volumeNumber: number;
 };
 
+type UserBook = {
+  id: string;
+  bookId: string;
+  volumeNumber: number;
+};
+
 export default function BookDetailPage() {
   const params = useParams<{ id: string }>();
   const [book, setBook] = useState<Book | null>(null);
@@ -43,6 +49,7 @@ export default function BookDetailPage() {
   const [volumeNumber, setVolumeNumber] = useState("");
   const [seriesMessage, setSeriesMessage] = useState<string | null>(null);
   const [seriesGuess, setSeriesGuess] = useState<SeriesGuess | null>(null);
+  const [userBook, setUserBook] = useState<UserBook | null>(null);
   const [deleteMessage, setDeleteMessage] = useState<string | null>(null);
   const manualSeriesName =
     seriesList.find((item) => item.id === seriesId)?.name || seriesId;
@@ -99,6 +106,32 @@ export default function BookDetailPage() {
       isMounted = false;
     };
   }, [book?.isbn13]);
+
+  useEffect(() => {
+    if (!params?.id) {
+      return;
+    }
+    let isMounted = true;
+    fetchJSON<{ items: UserBook[] }>(
+      `/user-books?bookId=${encodeURIComponent(params.id)}`,
+      { auth: true }
+    )
+      .then((data) => {
+        if (!isMounted) {
+          return;
+        }
+        setUserBook(data.items?.[0] ?? null);
+      })
+      .catch(() => {
+        if (!isMounted) {
+          return;
+        }
+        setUserBook(null);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [params?.id]);
 
   useEffect(() => {
     let isMounted = true;
@@ -232,7 +265,8 @@ export default function BookDetailPage() {
     }
   };
 
-  const displayVolume = seriesGuess?.volumeNumber || 0;
+  const displayVolume =
+    userBook?.volumeNumber || seriesGuess?.volumeNumber || 0;
 
   return (
     <div className="flex flex-col gap-6">
