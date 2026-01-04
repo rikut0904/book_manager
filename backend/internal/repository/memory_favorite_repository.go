@@ -52,6 +52,19 @@ func (r *MemoryFavoriteRepository) ListByUser(userID string) []domain.Favorite {
 	return items
 }
 
+func (r *MemoryFavoriteRepository) ListBySeriesID(seriesID string) []domain.Favorite {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	items := make([]domain.Favorite, 0)
+	for _, fav := range r.byID {
+		if fav.SeriesID == seriesID {
+			items = append(items, fav)
+		}
+	}
+	return items
+}
+
 func (r *MemoryFavoriteRepository) Delete(id string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()

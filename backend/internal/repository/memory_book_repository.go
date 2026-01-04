@@ -89,3 +89,17 @@ func (r *MemoryBookRepository) Delete(id string) bool {
 	}
 	return true
 }
+
+func (r *MemoryBookRepository) Update(book domain.Book) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, ok := r.byID[book.ID]; !ok {
+		return false
+	}
+	r.byID[book.ID] = book
+	if book.ISBN13 != "" {
+		r.byISBN[book.ISBN13] = book
+	}
+	return true
+}

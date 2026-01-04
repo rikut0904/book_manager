@@ -27,6 +27,9 @@ func (r *MemoryUserRepository) Create(user domain.User) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	if _, ok := r.byID[user.ID]; ok {
+		return ErrUserExists
+	}
 	if _, ok := r.byEmail[user.Email]; ok {
 		return ErrUserExists
 	}

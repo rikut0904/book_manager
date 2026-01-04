@@ -55,6 +55,10 @@ func New(
 	mux.HandleFunc("/series", h.Series)
 	mux.HandleFunc("/series/", h.SeriesByID)
 
+	mux.HandleFunc("/admin/openai-keys", h.AdminOpenAIKeys)
+	mux.HandleFunc("/admin/openai-keys/", h.AdminOpenAIKeysByID)
+	mux.HandleFunc("/admin/openai-models", h.AdminOpenAIModels)
+
 	handlerWithAudit := AuditMiddleware(auditRepo, mux)
 	return CORSMiddleware(allowedOrigins, handlerWithAudit)
 }

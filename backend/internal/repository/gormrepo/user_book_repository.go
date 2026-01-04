@@ -45,6 +45,30 @@ func (r *UserBookRepository) ListByUser(userID string) []domain.UserBook {
 	return items
 }
 
+func (r *UserBookRepository) ListAll() []domain.UserBook {
+	var models []UserBook
+	if err := r.db.Order("id asc").Find(&models).Error; err != nil {
+		return nil
+	}
+	items := make([]domain.UserBook, 0, len(models))
+	for _, model := range models {
+		items = append(items, modelToDomainUserBook(model))
+	}
+	return items
+}
+
+func (r *UserBookRepository) ListBySeriesID(seriesID string) []domain.UserBook {
+	var models []UserBook
+	if err := r.db.Where("series_id = ?", seriesID).Order("id asc").Find(&models).Error; err != nil {
+		return nil
+	}
+	items := make([]domain.UserBook, 0, len(models))
+	for _, model := range models {
+		items = append(items, modelToDomainUserBook(model))
+	}
+	return items
+}
+
 func (r *UserBookRepository) FindByID(id string) (domain.UserBook, bool) {
 	var model UserBook
 	if err := r.db.First(&model, "id = ?", id).Error; err != nil {

@@ -42,6 +42,10 @@ func (s *Service) ListByUser(userID string) []domain.Favorite {
 	return s.repo.ListByUser(userID)
 }
 
+func (s *Service) ListBySeriesID(seriesID string) []domain.Favorite {
+	return s.repo.ListBySeriesID(seriesID)
+}
+
 func (s *Service) Delete(id string) bool {
 	return s.repo.Delete(id)
 }

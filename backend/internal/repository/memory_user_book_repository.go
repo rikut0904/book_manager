@@ -52,6 +52,30 @@ func (r *MemoryUserBookRepository) ListByUser(userID string) []domain.UserBook {
 	return books
 }
 
+func (r *MemoryUserBookRepository) ListAll() []domain.UserBook {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	books := make([]domain.UserBook, 0, len(r.byID))
+	for _, book := range r.byID {
+		books = append(books, book)
+	}
+	return books
+}
+
+func (r *MemoryUserBookRepository) ListBySeriesID(seriesID string) []domain.UserBook {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	books := make([]domain.UserBook, 0)
+	for _, book := range r.byID {
+		if book.SeriesID == seriesID {
+			books = append(books, book)
+		}
+	}
+	return books
+}
+
 func (r *MemoryUserBookRepository) FindByID(id string) (domain.UserBook, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

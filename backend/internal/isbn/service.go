@@ -179,21 +179,9 @@ func inferSeries(title, seriesName string) SeriesGuess {
 	if title == "" {
 		return guess
 	}
-	matches := volumePattern.FindStringSubmatch(title)
-	if len(matches) > 0 {
-		if matches[1] != "" {
-			guess.VolumeNumber = toInt(matches[1])
-		} else if matches[2] != "" {
-			guess.VolumeNumber = toInt(matches[2])
-		}
-	}
-	if guess.VolumeNumber == 0 {
-		if match := trailingNumberPattern.FindStringSubmatch(title); len(match) > 1 {
-			guess.VolumeNumber = toInt(match[1])
-		}
-	}
 	if guess.Name == "" {
 		guess.Name = strings.TrimSpace(volumePattern.ReplaceAllString(title, ""))
+		guess.Name = strings.TrimSpace(trailingNumberPattern.ReplaceAllString(guess.Name, ""))
 		guess.Name = strings.Trim(guess.Name, " -‐–—・")
 	}
 	return guess
@@ -229,18 +217,4 @@ func NormalizeTitle(title string) string {
 	cleaned = strings.TrimSpace(cleaned)
 	cleaned = strings.Trim(cleaned, " -‐–—・")
 	return strings.TrimSpace(cleaned)
-}
-
-func toInt(value string) int {
-	n := 0
-	for _, r := range value {
-		if r >= '０' && r <= '９' {
-			r = r - '０' + '0'
-		}
-		if r < '0' || r > '9' {
-			continue
-		}
-		n = n*10 + int(r-'0')
-	}
-	return n
 }

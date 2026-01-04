@@ -52,6 +52,24 @@ func (r *FavoriteRepository) ListByUser(userID string) []domain.Favorite {
 	return items
 }
 
+func (r *FavoriteRepository) ListBySeriesID(seriesID string) []domain.Favorite {
+	var models []Favorite
+	if err := r.db.Where("series_id = ?", seriesID).Order("id asc").Find(&models).Error; err != nil {
+		return nil
+	}
+	items := make([]domain.Favorite, 0, len(models))
+	for _, model := range models {
+		items = append(items, domain.Favorite{
+			ID:       model.ID,
+			UserID:   model.UserID,
+			Type:     model.Type,
+			BookID:   valueOrEmptyString(model.BookID),
+			SeriesID: valueOrEmptyString(model.SeriesID),
+		})
+	}
+	return items
+}
+
 func (r *FavoriteRepository) Delete(id string) bool {
 	if err := r.db.Delete(&Favorite{}, "id = ?", id).Error; err != nil {
 		return false

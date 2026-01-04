@@ -49,6 +49,14 @@ func (s *Service) ListByUser(userID string) []domain.UserBook {
 	return s.repo.ListByUser(userID)
 }
 
+func (s *Service) ListAll() []domain.UserBook {
+	return s.repo.ListAll()
+}
+
+func (s *Service) ListBySeriesID(seriesID string) []domain.UserBook {
+	return s.repo.ListBySeriesID(seriesID)
+}
+
 func (s *Service) Update(id string, input UpdateInput) (domain.UserBook, bool) {
 	userBook, ok := s.repo.FindByID(id)
 	if !ok {

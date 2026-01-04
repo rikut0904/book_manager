@@ -48,6 +48,13 @@ func unauthorized(w http.ResponseWriter) {
 	})
 }
 
+func forbidden(w http.ResponseWriter, message string) {
+	writeJSON(w, http.StatusForbidden, map[string]string{
+		"error":   "forbidden",
+		"message": message,
+	})
+}
+
 func conflict(w http.ResponseWriter, message string) {
 	writeJSON(w, http.StatusConflict, map[string]string{
 		"error":   "conflict",

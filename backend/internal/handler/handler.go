@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -12,6 +14,7 @@ import (
 	"book_manager/backend/internal/domain"
 	"book_manager/backend/internal/favorites"
 	"book_manager/backend/internal/follows"
+	"book_manager/backend/internal/openaikeys"
 	"book_manager/backend/internal/isbn"
 	"book_manager/backend/internal/nexttobuy"
 	"book_manager/backend/internal/recommendations"
@@ -35,9 +38,11 @@ type Handler struct {
 	recs               *recommendations.Service
 	reports            *reports.Service
 	series             *series.Service
-	geminiAPIKey       string
-	geminiDefaultModel string
-	geminiPrompt       string
+	openAIKeys         *openaikeys.Service
+	openAIAPIKey       string
+	openAIDefaultModel string
+	aiPrompt           string
+	adminUserIDs       map[string]struct{}
 }
 
 func New(
@@ -53,10 +58,19 @@ func New(
 	recsService *recommendations.Service,
 	reportsService *reports.Service,
 	seriesService *series.Service,
-	geminiAPIKey string,
-	geminiDefaultModel string,
-	geminiPrompt string,
+	openAIKeyService *openaikeys.Service,
+	openAIAPIKey string,
+	openAIDefaultModel string,
+	aiPrompt string,
+	adminUserIDs []string,
 ) *Handler {
+	adminMap := make(map[string]struct{}, len(adminUserIDs))
+	for _, id := range adminUserIDs {
+		if strings.TrimSpace(id) == "" {
+			continue
+		}
+		adminMap[id] = struct{}{}
+	}
 	return &Handler{
 		auth:               authService,
 		isbn:               isbnService,
@@ -70,9 +84,11 @@ func New(
 		recs:               recsService,
 		reports:            reportsService,
 		series:             seriesService,
-		geminiAPIKey:       geminiAPIKey,
-		geminiDefaultModel: geminiDefaultModel,
-		geminiPrompt:       geminiPrompt,
+		openAIKeys:         openAIKeyService,
+		openAIAPIKey:       openAIAPIKey,
+		openAIDefaultModel: openAIDefaultModel,
+		aiPrompt:           aiPrompt,
+		adminUserIDs:       adminMap,
 	}
 }
 
@@ -248,14 +264,9 @@ func (h *Handler) IsbnLookup(w http.ResponseWriter, r *http.Request) {
 	var book domain.Book
 	seriesGuess := isbn.SeriesGuess{}
 	seriesSource := "simple"
-	isSeries := false
 	if existing, ok := h.books.FindByISBN(isbnValue); ok {
 		book = existing
-		if book.Title == "" {
-			book.Title = existing.Title
-		}
 		seriesGuess = isbn.InferSeries(book.Title, book.SeriesName)
-		isSeries = seriesGuess.Name != ""
 	} else {
 		fetched, guess, err := h.isbn.Lookup(isbnValue)
 		if err != nil {
@@ -263,25 +274,38 @@ func (h *Handler) IsbnLookup(w http.ResponseWriter, r *http.Request) {
 				notFound(w)
 				return
 			}
+			log.Printf("isbn lookup error: %v", err)
 			internalError(w)
 			return
 		}
 		book = fetched
+		book.OriginalTitle = fetched.Title
 		if cleaned := isbn.NormalizeTitle(book.Title); cleaned != "" {
 			book.Title = cleaned
 		}
 		seriesGuess = guess
-		isSeries = seriesGuess.Name != ""
 		created, err := h.books.Create(book)
 		if err != nil {
-			if errors.Is(err, books.ErrBookExists) {
-				if existing, ok := h.books.FindByISBN(isbnValue); ok {
+			if existing, ok := h.books.FindByISBN(isbnValue); ok {
+				book = existing
+			} else if book.ISBN13 != "" {
+				if existing, ok := h.books.FindByISBN(book.ISBN13); ok {
 					book = existing
+				} else if errors.Is(err, books.ErrBookExists) {
+					log.Printf("isbn lookup: book exists but not found by isbn=%s", book.ISBN13)
+					internalError(w)
+					return
 				} else {
+					log.Printf("isbn lookup: book create error: %v", err)
 					internalError(w)
 					return
 				}
+			} else if errors.Is(err, books.ErrBookExists) {
+				log.Printf("isbn lookup: book exists but not found by isbn=%s", isbnValue)
+				internalError(w)
+				return
 			} else {
+				log.Printf("isbn lookup: book create error: %v", err)
 				internalError(w)
 				return
 			}
@@ -289,36 +313,41 @@ func (h *Handler) IsbnLookup(w http.ResponseWriter, r *http.Request) {
 			book = created
 		}
 	}
-	if settings.GeminiEnabled {
-		apiKey := settings.GeminiAPIKey
-		if apiKey == "" {
-			apiKey = h.geminiAPIKey
+	sharedKey, hasShared := h.openAIKeys.First()
+		apiKey := h.openAIAPIKey
+		if hasShared {
+			apiKey = sharedKey.APIKey
 		}
-		model := settings.GeminiModel
-		if model == "" {
-			model = h.geminiDefaultModel
-		}
-		client := ai.NewGeminiClient(apiKey, model, h.geminiPrompt)
-		if guess, err := client.GuessSeries(r.Context(), ai.SeriesInput{
-			Title:         book.Title,
-			Authors:       book.Authors,
-			Publisher:     book.Publisher,
-			PublishedDate: book.PublishedDate,
-			ISBN13:        book.ISBN13,
-			SeriesName:    book.SeriesName,
-		}); err == nil {
-			if guess.IsSeries && strings.TrimSpace(guess.Name) != "" {
-				seriesGuess = isbn.SeriesGuess{
-					Name:         guess.Name,
-					VolumeNumber: guess.VolumeNumber,
-				}
-				seriesSource = "gemini"
-				isSeries = true
-			} else if !guess.IsSeries {
-				seriesGuess = isbn.SeriesGuess{}
-				seriesSource = "gemini"
-				isSeries = false
+		if apiKey != "" {
+			rawTitle := book.OriginalTitle
+			if rawTitle == "" {
+				rawTitle = book.Title
 			}
+			model := h.openAIDefaultModel
+			if settings.OpenAIModel != "" {
+				model = settings.OpenAIModel
+			}
+			client := ai.NewOpenAIClient(apiKey, model, h.aiPrompt)
+			guess, err := client.GuessSeries(r.Context(), ai.SeriesInput{
+				Title:         rawTitle,
+				RawTitle:      rawTitle,
+				Authors:       book.Authors,
+				Publisher:     book.Publisher,
+				PublishedDate: book.PublishedDate,
+				ISBN13:        book.ISBN13,
+				SeriesName:    book.SeriesName,
+		})
+		if err != nil {
+				log.Printf("openai guess error: %v", err)
+		} else if guess.IsSeries && strings.TrimSpace(guess.Name) != "" {
+			seriesGuess = isbn.SeriesGuess{
+				Name:         guess.Name,
+				VolumeNumber: guess.VolumeNumber,
+			}
+			seriesSource = "openai"
+		} else if !guess.IsSeries {
+			seriesGuess = isbn.SeriesGuess{}
+			seriesSource = "openai"
 		}
 	}
 	if seriesGuess.Name != "" {
@@ -327,18 +356,6 @@ func (h *Handler) IsbnLookup(w http.ResponseWriter, r *http.Request) {
 	}
 	if seriesGuess.Name == "" {
 		seriesGuess.VolumeNumber = 0
-		isSeries = false
-	}
-	if isSeries && seriesGuess.VolumeNumber == 0 {
-		inferred := isbn.InferSeries(book.Title, seriesGuess.Name)
-		if inferred.VolumeNumber > 0 {
-			seriesGuess.VolumeNumber = inferred.VolumeNumber
-		} else if book.SeriesName != "" {
-			inferred := isbn.InferSeries(book.Title, book.SeriesName)
-			if inferred.VolumeNumber > 0 {
-				seriesGuess.VolumeNumber = inferred.VolumeNumber
-			}
-		}
 	}
 	seriesID := ""
 	if seriesGuess.Name != "" {
@@ -504,11 +521,21 @@ func (h *Handler) BookByID(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UserBooks(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		userID := r.URL.Query().Get("userId")
+		userID := strings.TrimSpace(r.URL.Query().Get("userId"))
 		if userID == "" {
-			userID = "user_demo"
+			userID = userIDFromRequest(r)
 		}
+		bookID := strings.TrimSpace(r.URL.Query().Get("bookId"))
 		items := h.userBooks.ListByUser(userID)
+		if bookID != "" {
+			filtered := items[:0]
+			for _, item := range items {
+				if item.BookID == bookID {
+					filtered = append(filtered, item)
+				}
+			}
+			items = filtered
+		}
 		writeJSON(w, http.StatusOK, map[string]any{
 			"items": items,
 		})
@@ -1055,11 +1082,12 @@ func (h *Handler) UsersByID(w http.ResponseWriter, r *http.Request) {
 			"email":    user.Email,
 			"username": user.Username,
 		},
+		"isAdmin": h.isAdminUser(user.ID),
 		"settings": map[string]any{
 			"visibility":    settings.Visibility,
-			"geminiEnabled": settings.GeminiEnabled,
-			"geminiModel":   settings.GeminiModel,
-			"geminiHasKey":  settings.GeminiAPIKey != "",
+			"openaiEnabled": settings.OpenAIEnabled,
+			"openaiModel":   settings.OpenAIModel,
+			"openaiHasKey":  settings.OpenAIAPIKey != "",
 		},
 		"stats": map[string]int{
 			"ownedCount":  ownedCount,
@@ -1117,9 +1145,9 @@ func (h *Handler) UsersMeSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		Visibility    string `json:"visibility"`
-		GeminiEnabled *bool  `json:"geminiEnabled"`
-		GeminiModel   string `json:"geminiModel"`
-		GeminiAPIKey  string `json:"geminiApiKey"`
+		OpenAIEnabled *bool  `json:"openaiEnabled"`
+		OpenAIModel   string `json:"openaiModel"`
+		OpenAIAPIKey  string `json:"openaiApiKey"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		badRequest(w, "invalid json")
@@ -1129,7 +1157,15 @@ func (h *Handler) UsersMeSettings(w http.ResponseWriter, r *http.Request) {
 		req.Visibility = ""
 	}
 	userID := userIDFromRequest(r)
-	settings, err := h.users.UpdateSettings(userID, req.Visibility, req.GeminiEnabled, req.GeminiModel, req.GeminiAPIKey)
+	if req.OpenAIEnabled != nil || req.OpenAIAPIKey != "" {
+		badRequest(w, "use shared openai keys")
+		return
+	}
+	if req.OpenAIModel != "" && !h.isAdminUser(userID) {
+		forbidden(w, "admin only")
+		return
+	}
+	settings, err := h.users.UpdateSettings(userID, req.Visibility, req.OpenAIEnabled, req.OpenAIModel, req.OpenAIAPIKey)
 	if err != nil {
 		if errors.Is(err, users.ErrInvalidVisibility) {
 			badRequest(w, "visibility must be public or followers")
@@ -1140,12 +1176,20 @@ func (h *Handler) UsersMeSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"settings": map[string]any{
-			"visibility":     settings.Visibility,
-			"geminiEnabled":  settings.GeminiEnabled,
-			"geminiModel":    settings.GeminiModel,
-			"geminiHasKey":   settings.GeminiAPIKey != "",
+			"visibility":    settings.Visibility,
+			"openaiEnabled": settings.OpenAIEnabled,
+			"openaiModel":   settings.OpenAIModel,
+			"openaiHasKey":  settings.OpenAIAPIKey != "",
 		},
 	})
+}
+
+func (h *Handler) isAdminUser(userID string) bool {
+	if userID == "" {
+		return false
+	}
+	_, ok := h.adminUserIDs[userID]
+	return ok
 }
 
 func (h *Handler) Follows(w http.ResponseWriter, r *http.Request) {
@@ -1253,11 +1297,145 @@ func (h *Handler) SeriesByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, _ := pathID("/series/", r.URL.Path)
+	if len(h.userBooks.ListBySeriesID(id)) > 0 {
+		conflict(w, "series is referenced by user books")
+		return
+	}
+	if len(h.favorites.ListBySeriesID(id)) > 0 {
+		conflict(w, "series is referenced by favorites")
+		return
+	}
 	if !h.series.Delete(id) {
 		notFound(w)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (h *Handler) AdminOpenAIKeys(w http.ResponseWriter, r *http.Request) {
+	if !h.isAdminUser(userIDFromRequest(r)) {
+		forbidden(w, "admin only")
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		items := h.openAIKeys.List()
+		out := make([]map[string]any, 0, len(items))
+		for _, item := range items {
+			out = append(out, map[string]any{
+				"id":        item.ID,
+				"name":      item.Name,
+				"maskedKey": openaikeys.MaskKey(item.APIKey),
+				"createdAt": item.CreatedAt,
+			})
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"items": out})
+	case http.MethodPost:
+		var req struct {
+			Name   string `json:"name"`
+			APIKey string `json:"apiKey"`
+		}
+		if err := decodeJSON(r, &req); err != nil {
+			badRequest(w, "invalid json")
+			return
+		}
+		if strings.TrimSpace(req.Name) == "" || strings.TrimSpace(req.APIKey) == "" {
+			badRequest(w, "name and apiKey are required")
+			return
+		}
+		item := h.openAIKeys.Create(req.Name, req.APIKey)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"id":        item.ID,
+			"name":      item.Name,
+			"maskedKey": openaikeys.MaskKey(item.APIKey),
+			"createdAt": item.CreatedAt,
+		})
+	default:
+		methodNotAllowed(w, http.MethodGet, http.MethodPost)
+	}
+}
+
+func (h *Handler) AdminOpenAIKeysByID(w http.ResponseWriter, r *http.Request) {
+	if !h.isAdminUser(userIDFromRequest(r)) {
+		forbidden(w, "admin only")
+		return
+	}
+	if _, ok := pathID("/admin/openai-keys/", r.URL.Path); !ok {
+		notFound(w)
+		return
+	}
+	if r.Method != http.MethodDelete {
+		methodNotAllowed(w, http.MethodDelete)
+		return
+	}
+	id, _ := pathID("/admin/openai-keys/", r.URL.Path)
+	if !h.openAIKeys.Delete(id) {
+		notFound(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (h *Handler) AdminOpenAIModels(w http.ResponseWriter, r *http.Request) {
+	if !h.isAdminUser(userIDFromRequest(r)) {
+		forbidden(w, "admin only")
+		return
+	}
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	sharedKey, ok := h.openAIKeys.First()
+	apiKey := h.openAIAPIKey
+	if ok && strings.TrimSpace(sharedKey.APIKey) != "" {
+		apiKey = sharedKey.APIKey
+	}
+	if strings.TrimSpace(apiKey) == "" {
+		badRequest(w, "shared api key is required")
+		return
+	}
+	models, err := fetchOpenAIModels(apiKey)
+	if err != nil {
+		internalError(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": models})
+}
+
+type openAIModelsResponse struct {
+	Data []struct {
+		ID string `json:"id"`
+	} `json:"data"`
+}
+
+func fetchOpenAIModels(apiKey string) ([]string, error) {
+	req, err := http.NewRequest(http.MethodGet, "https://api.openai.com/v1/models", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.New("openai models fetch failed")
+	}
+	var payload openAIModelsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return nil, err
+	}
+	models := make([]string, 0, len(payload.Data))
+	for _, model := range payload.Data {
+		if model.ID == "" {
+			continue
+		}
+		if strings.HasPrefix(model.ID, "gpt-") || strings.HasPrefix(model.ID, "o") {
+			models = append(models, model.ID)
+		}
+	}
+	return models, nil
 }
 
 func pathID(prefix, path string) (string, bool) {

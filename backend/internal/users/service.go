@@ -65,13 +65,13 @@ func (s *Service) GetSettings(userID string) domain.ProfileSettings {
 	return domain.ProfileSettings{
 		UserID:        userID,
 		Visibility:    "public",
-		GeminiEnabled: false,
-		GeminiModel:   "",
-		GeminiAPIKey:  "",
+		OpenAIEnabled: false,
+		OpenAIModel:   "",
+		OpenAIAPIKey:  "",
 	}
 }
 
-func (s *Service) UpdateSettings(userID, visibility string, geminiEnabled *bool, geminiModel string, geminiAPIKey string) (domain.ProfileSettings, error) {
+func (s *Service) UpdateSettings(userID, visibility string, openAIEnabled *bool, openAIModel string, openAIAPIKey string) (domain.ProfileSettings, error) {
 	if visibility != "" && visibility != "public" && visibility != "followers" {
 		return domain.ProfileSettings{}, ErrInvalidVisibility
 	}
@@ -79,14 +79,14 @@ func (s *Service) UpdateSettings(userID, visibility string, geminiEnabled *bool,
 	if visibility != "" {
 		current.Visibility = visibility
 	}
-	if geminiEnabled != nil {
-		current.GeminiEnabled = *geminiEnabled
+	if openAIEnabled != nil {
+		current.OpenAIEnabled = *openAIEnabled
 	}
-	if geminiModel != "" {
-		current.GeminiModel = geminiModel
+	if openAIModel != "" {
+		current.OpenAIModel = openAIModel
 	}
-	if geminiAPIKey != "" {
-		current.GeminiAPIKey = geminiAPIKey
+	if openAIAPIKey != "" {
+		current.OpenAIAPIKey = openAIAPIKey
 	}
 	s.settings.Upsert(current)
 	return current, nil

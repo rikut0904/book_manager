@@ -52,6 +52,10 @@ func (s *Service) Delete(id string) bool {
 	return s.books.Delete(id)
 }
 
+func (s *Service) Update(book domain.Book) bool {
+	return s.books.Update(book)
+}
+
 func newID() string {
 	seed := make([]byte, 16)
 	if _, err := rand.Read(seed); err != nil {

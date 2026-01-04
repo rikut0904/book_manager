@@ -28,6 +28,7 @@ func (r *BookRepository) Create(book domain.Book) error {
 		ID:            book.ID,
 		ISBN13:        isbnPtr,
 		Title:         book.Title,
+		OriginalTitle: book.OriginalTitle,
 		Authors:       datatypes.JSON(authors),
 		Publisher:     book.Publisher,
 		PublishedDate: book.PublishedDate,
@@ -80,6 +81,33 @@ func (r *BookRepository) Delete(id string) bool {
 	return result.RowsAffected > 0
 }
 
+func (r *BookRepository) Update(book domain.Book) bool {
+	var isbnPtr *string
+	if book.ISBN13 != "" {
+		isbnPtr = &book.ISBN13
+	}
+	authors, err := marshalAuthors(book.Authors)
+	if err != nil {
+		return false
+	}
+	model := Book{
+		ID:            book.ID,
+		ISBN13:        isbnPtr,
+		Title:         book.Title,
+		OriginalTitle: book.OriginalTitle,
+		Authors:       datatypes.JSON(authors),
+		Publisher:     book.Publisher,
+		PublishedDate: book.PublishedDate,
+		ThumbnailURL:  book.ThumbnailURL,
+		Source:        book.Source,
+		SeriesName:    book.SeriesName,
+	}
+	if err := r.db.Save(&model).Error; err != nil {
+		return false
+	}
+	return true
+}
+
 func modelToDomainBook(model Book) domain.Book {
 	isbn := ""
 	if model.ISBN13 != nil {
@@ -89,6 +117,7 @@ func modelToDomainBook(model Book) domain.Book {
 		ID:            model.ID,
 		ISBN13:        isbn,
 		Title:         model.Title,
+		OriginalTitle: model.OriginalTitle,
 		Authors:       unmarshalAuthors(model.Authors),
 		Publisher:     model.Publisher,
 		PublishedDate: model.PublishedDate,

@@ -16,15 +16,16 @@ type User struct {
 type ProfileSettings struct {
 	UserID     string `gorm:"primaryKey"`
 	Visibility string
-	GeminiEnabled bool
-	GeminiModel string
-	GeminiAPIKey string
+	OpenAIEnabled bool
+	OpenAIModel   string
+	OpenAIAPIKey  string
 }
 
 type Book struct {
 	ID            string  `gorm:"primaryKey"`
 	ISBN13        *string `gorm:"uniqueIndex"`
 	Title         string
+	OriginalTitle string
 	Authors       datatypes.JSON `gorm:"type:jsonb"`
 	Publisher     string
 	PublishedDate string
@@ -76,6 +77,13 @@ type Series struct {
 	ID             string `gorm:"primaryKey"`
 	Name           string
 	NormalizedName string `gorm:"uniqueIndex"`
+}
+
+type OpenAIKey struct {
+	ID        string `gorm:"primaryKey"`
+	Name      string
+	APIKey    string
+	CreatedAt time.Time `gorm:"index"`
 }
 
 type Recommendation struct {

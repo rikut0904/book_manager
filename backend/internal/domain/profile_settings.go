@@ -3,7 +3,7 @@ package domain
 type ProfileSettings struct {
 	UserID        string
 	Visibility    string
-	GeminiEnabled bool
-	GeminiModel   string
-	GeminiAPIKey  string
+	OpenAIEnabled bool
+	OpenAIModel   string
+	OpenAIAPIKey  string
 }

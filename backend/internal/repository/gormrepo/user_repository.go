@@ -21,6 +21,9 @@ func (r *UserRepository) Create(user domain.User) error {
 		Username:     user.Username,
 		PasswordHash: user.PasswordHash,
 	}
+	if _, ok := r.FindByID(user.ID); ok {
+		return repository.ErrUserExists
+	}
 	if err := r.db.Create(&model).Error; err != nil {
 		if isUniqueViolation(err) {
 			return repository.ErrUserExists

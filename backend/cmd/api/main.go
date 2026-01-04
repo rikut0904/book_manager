@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"book_manager/backend/internal/db"
 	"book_manager/backend/internal/favorites"
 	"book_manager/backend/internal/follows"
+	"book_manager/backend/internal/openaikeys"
 	"book_manager/backend/internal/handler"
 	"book_manager/backend/internal/isbn"
 	"book_manager/backend/internal/nexttobuy"
@@ -37,7 +39,7 @@ func main() {
 	_ = godotenv.Load("../.env")
 
 	cfg := config.Load()
-	geminiPrompt := loadPrompt("prompt.md")
+	aiPrompt := loadPrompt("prompt.md")
 	var (
 		userRepo           repository.UserRepository
 		bookRepo           repository.BookRepository
@@ -51,6 +53,7 @@ func main() {
 		isbnCacheRepo      repository.IsbnCacheRepository
 		auditLogRepo       repository.AuditLogRepository
 		seriesRepo         repository.SeriesRepository
+		openAIKeyRepo      repository.OpenAIKeyRepository
 	)
 
 	if cfg.DatabaseURL != "" {
@@ -71,6 +74,7 @@ func main() {
 			&gormrepo.IsbnCache{},
 			&gormrepo.AuditLog{},
 			&gormrepo.Series{},
+			&gormrepo.OpenAIKey{},
 		); err != nil {
 			log.Fatalf("db migrate error: %v", err)
 		}
@@ -86,6 +90,7 @@ func main() {
 		isbnCacheRepo = gormrepo.NewIsbnCacheRepository(dbConn)
 		auditLogRepo = gormrepo.NewAuditLogRepository(dbConn)
 		seriesRepo = gormrepo.NewSeriesRepository(dbConn)
+		openAIKeyRepo = gormrepo.NewOpenAIKeyRepository(dbConn)
 	} else {
 		userRepo = repository.NewMemoryUserRepository()
 		bookRepo = repository.NewMemoryBookRepository()
@@ -99,6 +104,7 @@ func main() {
 		isbnCacheRepo = repository.NewMemoryIsbnCacheRepository()
 		auditLogRepo = repository.NewMemoryAuditLogRepository()
 		seriesRepo = repository.NewMemorySeriesRepository()
+		openAIKeyRepo = repository.NewMemoryOpenAIKeyRepository()
 	}
 	authService := auth.NewService(userRepo)
 	isbnCacheTTL := time.Duration(cfg.IsbnCacheTTLMinutes) * time.Minute
@@ -119,7 +125,11 @@ func main() {
 		From: cfg.SMTPFrom,
 	})
 	seriesService := series.NewService(seriesRepo)
+	openAIKeyService := openaikeys.NewService(openAIKeyRepo)
 	_ = authService.SeedUser("user_demo", "demo@book.local", "demo", "password")
+	if count := normalizeBooks(bookService); count > 0 {
+		log.Printf("normalized %d book titles", count)
+	}
 	if count := seriesService.NormalizeAll(); count > 0 {
 		log.Printf("normalized %d series names", count)
 	}
@@ -136,9 +146,11 @@ func main() {
 		recsService,
 		reportsService,
 		seriesService,
-		cfg.GeminiAPIKey,
-		cfg.GeminiDefaultModel,
-		geminiPrompt,
+		openAIKeyService,
+		cfg.OpenAIAPIKey,
+		cfg.OpenAIDefaultModel,
+		aiPrompt,
+		parseAdminUserIDs(cfg.AdminUserIDs),
 	)
 	r := router.New(h, auditLogRepo, cfg.CORSAllowedOrigins)
 
@@ -178,6 +190,39 @@ func loadPrompt(path string) string {
 	}
 	return string(data)
 }
+
+func parseAdminUserIDs(value string) []string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	parts := strings.Split(value, ",")
+	ids := make([]string, 0, len(parts))
+	for _, part := range parts {
+		id := strings.TrimSpace(part)
+		if id == "" {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+func normalizeBooks(bookService *books.Service) int {
+	items := bookService.List()
+	updated := 0
+	for _, item := range items {
+		cleaned := isbn.NormalizeTitle(item.Title)
+		if cleaned == "" || cleaned == item.Title {
+			continue
+		}
+		item.Title = cleaned
+		if bookService.Update(item) {
+			updated++
+		}
+	}
+	return updated
+}
+
 
 func startAuditCleanup(repo repository.AuditLogRepository) {
 	if repo == nil {
