@@ -15,13 +15,12 @@ import (
 	"book_manager/backend/internal/domain"
 	"book_manager/backend/internal/favorites"
 	"book_manager/backend/internal/follows"
-	"book_manager/backend/internal/openaikeys"
 	"book_manager/backend/internal/isbn"
 	"book_manager/backend/internal/nexttobuy"
+	"book_manager/backend/internal/openaikeys"
 	"book_manager/backend/internal/recommendations"
 	"book_manager/backend/internal/reports"
 	"book_manager/backend/internal/series"
-	"book_manager/backend/internal/tags"
 	"book_manager/backend/internal/userbooks"
 	"book_manager/backend/internal/users"
 )
@@ -35,7 +34,6 @@ type Handler struct {
 	follows            *follows.Service
 	favorites          *favorites.Service
 	nextToBuy          *nexttobuy.Service
-	tags               *tags.Service
 	recs               *recommendations.Service
 	reports            *reports.Service
 	series             *series.Service
@@ -55,7 +53,6 @@ func New(
 	followsService *follows.Service,
 	favoritesService *favorites.Service,
 	nextToBuyService *nexttobuy.Service,
-	tagsService *tags.Service,
 	recsService *recommendations.Service,
 	reportsService *reports.Service,
 	seriesService *series.Service,
@@ -81,7 +78,6 @@ func New(
 		follows:            followsService,
 		favorites:          favoritesService,
 		nextToBuy:          nextToBuyService,
-		tags:               tagsService,
 		recs:               recsService,
 		reports:            reportsService,
 		series:             seriesService,
@@ -528,7 +524,6 @@ func (h *Handler) UserBooks(w http.ResponseWriter, r *http.Request) {
 		}
 		bookID := strings.TrimSpace(r.URL.Query().Get("bookId"))
 		query := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("query")))
-		tagID := strings.TrimSpace(r.URL.Query().Get("tag"))
 		seriesID := strings.TrimSpace(r.URL.Query().Get("series"))
 		page := 1
 		if value := strings.TrimSpace(r.URL.Query().Get("page")); value != "" {
@@ -550,21 +545,6 @@ func (h *Handler) UserBooks(w http.ResponseWriter, r *http.Request) {
 			filtered := items[:0]
 			for _, item := range items {
 				if item.SeriesID == seriesID {
-					filtered = append(filtered, item)
-				}
-			}
-			items = filtered
-		}
-		if tagID != "" {
-			tagged := make(map[string]struct{})
-			for _, tag := range h.tags.ListBookTagsByUser(userID) {
-				if tag.TagID == tagID {
-					tagged[tag.BookID] = struct{}{}
-				}
-			}
-			filtered := items[:0]
-			for _, item := range items {
-				if _, ok := tagged[item.BookID]; ok {
 					filtered = append(filtered, item)
 				}
 			}
@@ -973,121 +953,6 @@ func (h *Handler) NextToBuyManualByID(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	default:
 		methodNotAllowed(w, http.MethodPatch, http.MethodDelete)
-	}
-}
-
-func (h *Handler) Tags(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		userID := userIDFromRequest(r)
-		items := h.tags.ListByUser(userID)
-		writeJSON(w, http.StatusOK, map[string]any{
-			"items": items,
-		})
-	case http.MethodPost:
-		var req struct {
-			Name string `json:"name"`
-		}
-		if err := decodeJSON(r, &req); err != nil {
-			badRequest(w, "invalid json")
-			return
-		}
-		if strings.TrimSpace(req.Name) == "" {
-			badRequest(w, "name is required")
-			return
-		}
-		userID := userIDFromRequest(r)
-		tag, err := h.tags.Create(userID, req.Name)
-		if err != nil {
-			if errors.Is(err, tags.ErrTagExists) {
-				conflict(w, "tag already exists")
-				return
-			}
-			internalError(w)
-			return
-		}
-		writeJSON(w, http.StatusOK, tag)
-	default:
-		methodNotAllowed(w, http.MethodGet, http.MethodPost)
-	}
-}
-
-func (h *Handler) TagsByID(w http.ResponseWriter, r *http.Request) {
-	if _, ok := pathID("/tags/", r.URL.Path); !ok {
-		notFound(w)
-		return
-	}
-	if r.Method != http.MethodDelete {
-		methodNotAllowed(w, http.MethodDelete)
-		return
-	}
-	id, _ := pathID("/tags/", r.URL.Path)
-	if !h.tags.Delete(id) {
-		notFound(w)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
-}
-
-func (h *Handler) BookTags(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodPost:
-		var req struct {
-			BookID string `json:"bookId"`
-			TagID  string `json:"tagId"`
-			UserID string `json:"userId"`
-		}
-		if err := decodeJSON(r, &req); err != nil {
-			badRequest(w, "invalid json")
-			return
-		}
-		if strings.TrimSpace(req.BookID) == "" || strings.TrimSpace(req.TagID) == "" {
-			badRequest(w, "bookId and tagId are required")
-			return
-		}
-		userID := strings.TrimSpace(req.UserID)
-		if userID == "" {
-			userID = userIDFromRequest(r)
-		}
-		item, err := h.tags.AddBookTag(userID, req.BookID, req.TagID)
-		if err != nil {
-			if errors.Is(err, tags.ErrTagNotFound) {
-				notFound(w)
-				return
-			}
-			if errors.Is(err, tags.ErrBookTagExists) {
-				conflict(w, "book tag already exists")
-				return
-			}
-			internalError(w)
-			return
-		}
-		writeJSON(w, http.StatusOK, item)
-	case http.MethodDelete:
-		var req struct {
-			BookID string `json:"bookId"`
-			TagID  string `json:"tagId"`
-			UserID string `json:"userId"`
-		}
-		if err := decodeJSON(r, &req); err != nil {
-			badRequest(w, "invalid json")
-			return
-		}
-		if strings.TrimSpace(req.BookID) == "" || strings.TrimSpace(req.TagID) == "" {
-			badRequest(w, "bookId and tagId are required")
-			return
-		}
-		userID := strings.TrimSpace(req.UserID)
-		if userID == "" {
-			userID = userIDFromRequest(r)
-		}
-		if !h.tags.RemoveBookTag(userID, req.BookID, req.TagID) {
-			notFound(w)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
-	default:
-		methodNotAllowed(w, http.MethodPost, http.MethodDelete)
 	}
 }
 

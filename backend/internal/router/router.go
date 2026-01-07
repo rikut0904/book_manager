@@ -36,9 +36,6 @@ func New(
 	mux.HandleFunc("/next-to-buy/manual", h.NextToBuyManual)
 	mux.HandleFunc("/next-to-buy/manual/", h.NextToBuyManualByID)
 
-	mux.HandleFunc("/tags", h.Tags)
-	mux.HandleFunc("/tags/", h.TagsByID)
-	mux.HandleFunc("/book-tags", h.BookTags)
 
 	mux.HandleFunc("/recommendations", h.Recommendations)
 	mux.HandleFunc("/recommendations/", h.RecommendationsByID)

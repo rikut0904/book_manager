@@ -14,7 +14,7 @@ go run ./cmd/api
 - 書誌マスタ（/books）: インメモリ実装
 - 所蔵（/user-books）: インメモリ実装
 - Users/Follows: インメモリ実装
-- Favorites/Next-to-buy/Tags/Recommendations: インメモリ実装
+- Favorites/Next-to-buy/Recommendations: インメモリ実装
 - 監査ログ: DB実装（DATABASE_URLがある場合）
 - そのほか: echo 返却
 

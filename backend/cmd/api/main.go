@@ -27,7 +27,6 @@ import (
 	"book_manager/backend/internal/repository/gormrepo"
 	"book_manager/backend/internal/router"
 	"book_manager/backend/internal/series"
-	"book_manager/backend/internal/tags"
 	"book_manager/backend/internal/userbooks"
 	"book_manager/backend/internal/users"
 
@@ -47,8 +46,6 @@ func main() {
 		profileRepo        repository.ProfileSettingsRepository
 		favoriteRepo       repository.FavoriteRepository
 		nextToBuyRepo      repository.NextToBuyRepository
-		tagRepo            repository.TagRepository
-		bookTagRepo        repository.BookTagRepository
 		recommendationRepo repository.RecommendationRepository
 		isbnCacheRepo      repository.IsbnCacheRepository
 		auditLogRepo       repository.AuditLogRepository
@@ -68,8 +65,6 @@ func main() {
 			&gormrepo.UserBook{},
 			&gormrepo.Favorite{},
 			&gormrepo.NextToBuyManual{},
-			&gormrepo.Tag{},
-			&gormrepo.BookTag{},
 			&gormrepo.Recommendation{},
 			&gormrepo.IsbnCache{},
 			&gormrepo.AuditLog{},
@@ -84,8 +79,6 @@ func main() {
 		profileRepo = gormrepo.NewProfileSettingsRepository(dbConn)
 		favoriteRepo = gormrepo.NewFavoriteRepository(dbConn)
 		nextToBuyRepo = gormrepo.NewNextToBuyRepository(dbConn)
-		tagRepo = gormrepo.NewTagRepository(dbConn)
-		bookTagRepo = gormrepo.NewBookTagRepository(dbConn)
 		recommendationRepo = gormrepo.NewRecommendationRepository(dbConn)
 		isbnCacheRepo = gormrepo.NewIsbnCacheRepository(dbConn)
 		auditLogRepo = gormrepo.NewAuditLogRepository(dbConn)
@@ -98,8 +91,6 @@ func main() {
 		profileRepo = repository.NewMemoryProfileSettingsRepository()
 		favoriteRepo = repository.NewMemoryFavoriteRepository()
 		nextToBuyRepo = repository.NewMemoryNextToBuyRepository()
-		tagRepo = repository.NewMemoryTagRepository()
-		bookTagRepo = repository.NewMemoryBookTagRepository()
 		recommendationRepo = repository.NewMemoryRecommendationRepository()
 		isbnCacheRepo = repository.NewMemoryIsbnCacheRepository()
 		auditLogRepo = repository.NewMemoryAuditLogRepository()
@@ -115,7 +106,6 @@ func main() {
 	followsService := follows.NewService()
 	favoritesService := favorites.NewService(favoriteRepo)
 	nextToBuyService := nexttobuy.NewService(nextToBuyRepo)
-	tagsService := tags.NewService(tagRepo, bookTagRepo)
 	recsService := recommendations.NewService(recommendationRepo)
 	reportsService := reports.NewService(cfg.BookReportTo, reports.SMTPConfig{
 		Host: cfg.SMTPHost,
@@ -142,7 +132,6 @@ func main() {
 		followsService,
 		favoritesService,
 		nextToBuyService,
-		tagsService,
 		recsService,
 		reportsService,
 		seriesService,

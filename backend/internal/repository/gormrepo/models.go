@@ -61,18 +61,6 @@ type NextToBuyManual struct {
 	Note         string
 }
 
-type Tag struct {
-	ID          string `gorm:"primaryKey"`
-	OwnerUserID string `gorm:"uniqueIndex:idx_tag_owner_name"`
-	Name        string `gorm:"uniqueIndex:idx_tag_owner_name"`
-}
-
-type BookTag struct {
-	UserID string `gorm:"primaryKey"`
-	BookID string `gorm:"primaryKey"`
-	TagID  string `gorm:"primaryKey"`
-}
-
 type Series struct {
 	ID             string `gorm:"primaryKey"`
 	Name           string
