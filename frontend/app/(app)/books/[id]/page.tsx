@@ -29,6 +29,13 @@ type UserBook = {
   volumeNumber: number;
 };
 
+type Favorite = {
+  id: string;
+  type: "book" | "series";
+  bookId: string;
+  seriesId: string;
+};
+
 export default function BookDetailPage() {
   const params = useParams<{ id: string }>();
   const [book, setBook] = useState<Book | null>(null);
@@ -39,6 +46,7 @@ export default function BookDetailPage() {
   const [seriesMessage, setSeriesMessage] = useState<string | null>(null);
   const [userBook, setUserBook] = useState<UserBook | null>(null);
   const [deleteMessage, setDeleteMessage] = useState<string | null>(null);
+  const [favorites, setFavorites] = useState<Favorite[]>([]);
   const manualSeriesName =
     seriesList.find((item) => item.id === seriesId)?.name || seriesId;
   const storedSeriesName = userBook?.seriesId
@@ -69,6 +77,26 @@ export default function BookDetailPage() {
       isMounted = false;
     };
   }, [params?.id]);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchJSON<{ items: Favorite[] }>("/favorites", { auth: true })
+      .then((data) => {
+        if (!isMounted) {
+          return;
+        }
+        setFavorites(data.items ?? []);
+      })
+      .catch(() => {
+        if (!isMounted) {
+          return;
+        }
+        setFavorites([]);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!params?.id) {
@@ -165,7 +193,40 @@ export default function BookDetailPage() {
     }
   };
 
+  const handleToggleFavorite = async () => {
+    if (!params?.id) {
+      return;
+    }
+    const existing = favorites.find(
+      (item) => item.type === "book" && item.bookId === params.id
+    );
+    try {
+      if (existing) {
+        await fetchJSON(`/favorites/${existing.id}`, {
+          method: "DELETE",
+          auth: true,
+        });
+        setFavorites((prev) => prev.filter((item) => item.id !== existing.id));
+      } else {
+        const created = await fetchJSON<Favorite>("/favorites", {
+          method: "POST",
+          auth: true,
+          body: JSON.stringify({
+            type: "book",
+            bookId: params.id,
+          }),
+        });
+        setFavorites((prev) => [...prev, created]);
+      }
+    } catch {
+      setDeleteMessage("お気に入りの更新に失敗しました。");
+    }
+  };
+
   const displayVolume = userBook?.volumeNumber || 0;
+  const favorite = favorites.find(
+    (item) => item.type === "book" && item.bookId === params?.id
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -189,12 +250,26 @@ export default function BookDetailPage() {
               {book?.authors?.join(" / ") || "著者未登録"}
             </p>
           </div>
-          <Link
-            className="rounded-full border border-[#e4d8c7] px-4 py-2 text-xs text-[#5c5d63]"
-            href="/books"
-          >
-            一覧へ戻る
-          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              aria-label={favorite ? "お気に入り解除" : "お気に入り登録"}
+              className={`flex h-10 w-10 items-center justify-center rounded-full border text-base transition ${
+                favorite
+                  ? "border-[#c86b3c] bg-[#c86b3c] text-white"
+                  : "border-[#e4d8c7] text-[#5c5d63] hover:bg-white"
+              }`}
+              type="button"
+              onClick={handleToggleFavorite}
+            >
+              {favorite ? "★" : "☆"}
+            </button>
+            <Link
+              className="rounded-full border border-[#e4d8c7] px-4 py-2 text-xs text-[#5c5d63]"
+              href="/books"
+            >
+              一覧へ戻る
+            </Link>
+          </div>
         </div>
         {error ? (
           <p className="mt-4 text-sm text-red-600">{error}</p>
@@ -231,7 +306,7 @@ export default function BookDetailPage() {
         </div>
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+      <section className="grid gap-6">
         <div className="rounded-3xl border border-[#e4d8c7] bg-white/70 p-6 shadow-sm">
           <h2 className="font-[var(--font-display)] text-2xl">
             シリーズ判定
@@ -307,22 +382,6 @@ export default function BookDetailPage() {
           </div>
         </div>
 
-        <div className="flex flex-col gap-6">
-          <div className="rounded-3xl border border-[#e4d8c7] bg-white/70 p-6 shadow-sm">
-            <h2 className="font-[var(--font-display)] text-2xl">お気に入り</h2>
-            <p className="mt-2 text-sm text-[#5c5d63]">
-              この巻またはシリーズをお気に入りに登録できます。
-            </p>
-            <div className="mt-4 flex gap-3">
-              <button className="rounded-full border border-[#e4d8c7] px-4 py-2 text-xs text-[#5c5d63]">
-                単巻で登録
-              </button>
-              <button className="rounded-full bg-[#c86b3c] px-4 py-2 text-xs text-white">
-                シリーズで登録
-              </button>
-            </div>
-          </div>
-        </div>
       </section>
     </div>
   );

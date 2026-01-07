@@ -181,11 +181,18 @@ export default function SeriesDetailPage() {
           </div>
           <div className="flex flex-wrap gap-3">
             <button
-              className="rounded-full border border-[#e4d8c7] px-4 py-2 text-xs text-[#5c5d63] hover:bg-white"
+              aria-label={
+                favorite ? "シリーズのお気に入り解除" : "シリーズをお気に入り登録"
+              }
+              className={`flex h-9 w-9 items-center justify-center rounded-full border text-base transition ${
+                favorite
+                  ? "border-[#c86b3c] bg-[#c86b3c] text-white"
+                  : "border-[#e4d8c7] text-[#5c5d63] hover:bg-white"
+              }`}
               type="button"
               onClick={handleToggleFavorite}
             >
-              {favorite ? "お気に入り解除" : "お気に入り登録"}
+              {favorite ? "★" : "☆"}
             </button>
             <Link
               className="rounded-full border border-[#e4d8c7] px-4 py-2 text-xs text-[#5c5d63]"

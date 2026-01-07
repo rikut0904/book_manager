@@ -234,13 +234,20 @@ export default function BooksPage() {
               <div className="flex items-start justify-between gap-3 text-xs text-[#5c5d63]">
                 <span>シリーズ</span>
                 <button
-                  className="rounded-full border border-[#e4d8c7] px-3 py-1 text-[11px] text-[#5c5d63] transition hover:bg-white"
+                  aria-label={
+                    favorite ? "シリーズのお気に入り解除" : "シリーズをお気に入り登録"
+                  }
+                  className={`flex h-8 w-8 items-center justify-center rounded-full border text-sm transition ${
+                    favorite
+                      ? "border-[#c86b3c] bg-[#c86b3c] text-white"
+                      : "border-[#e4d8c7] text-[#5c5d63] hover:bg-white"
+                  }`}
                   type="button"
                   onClick={(event) =>
                     handleToggleSeriesFavorite(series.seriesId, event)
                   }
                 >
-                  {favorite ? "お気に入り解除" : "お気に入り登録"}
+                  {favorite ? "★" : "☆"}
                 </button>
               </div>
               <h2 className="mt-4 font-[var(--font-display)] text-xl text-[#1b1c1f]">
