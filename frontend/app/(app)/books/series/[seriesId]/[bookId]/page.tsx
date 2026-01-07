@@ -29,8 +29,9 @@ type UserBook = {
   volumeNumber: number;
 };
 
-export default function BookDetailPage() {
-  const params = useParams<{ id: string }>();
+export default function SeriesBookDetailPage() {
+  const params = useParams<{ seriesId: string; bookId: string }>();
+  const bookId = params?.bookId;
   const [book, setBook] = useState<Book | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [seriesId, setSeriesId] = useState("");
@@ -48,11 +49,11 @@ export default function BookDetailPage() {
   const router = useRouter();
 
   useEffect(() => {
-    if (!params?.id) {
+    if (!bookId) {
       return;
     }
     let isMounted = true;
-    fetchJSON<Book>(`/books/${params.id}`, { auth: true })
+    fetchJSON<Book>(`/books/${bookId}`, { auth: true })
       .then((data) => {
         if (!isMounted) {
           return;
@@ -68,27 +69,22 @@ export default function BookDetailPage() {
     return () => {
       isMounted = false;
     };
-  }, [params?.id]);
+  }, [bookId]);
 
   useEffect(() => {
-    if (!params?.id) {
+    if (!bookId) {
       return;
     }
     let isMounted = true;
     fetchJSON<{ items: UserBook[] }>(
-      `/user-books?bookId=${encodeURIComponent(params.id)}`,
+      `/user-books?bookId=${encodeURIComponent(bookId)}`,
       { auth: true }
     )
       .then((data) => {
         if (!isMounted) {
           return;
         }
-        const item = data.items?.[0] ?? null;
-        if (item?.seriesId) {
-          router.replace(`/books/series/${item.seriesId}/${params.id}`);
-          return;
-        }
-        setUserBook(item);
+        setUserBook(data.items?.[0] ?? null);
       })
       .catch(() => {
         if (!isMounted) {
@@ -99,7 +95,7 @@ export default function BookDetailPage() {
     return () => {
       isMounted = false;
     };
-  }, [params?.id]);
+  }, [bookId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -123,7 +119,7 @@ export default function BookDetailPage() {
 
   const handleSeriesOverride = async () => {
     setSeriesMessage(null);
-    if (!params?.id) {
+    if (!bookId) {
       return;
     }
     if (!seriesId.trim() || !volumeNumber.trim()) {
@@ -135,7 +131,7 @@ export default function BookDetailPage() {
         method: "PATCH",
         auth: true,
         body: JSON.stringify({
-          bookId: params.id,
+          bookId,
           seriesId: seriesId.trim(),
           volumeNumber: Number(volumeNumber),
         }),
@@ -148,14 +144,14 @@ export default function BookDetailPage() {
 
   const handleDeleteBook = async () => {
     setDeleteMessage(null);
-    if (!params?.id) {
+    if (!bookId) {
       return;
     }
     if (!window.confirm("この書籍を削除しますか？")) {
       return;
     }
     try {
-      await fetchJSON(`/books/${params.id}`, {
+      await fetchJSON(`/books/${bookId}`, {
         method: "DELETE",
         auth: true,
       });
@@ -166,6 +162,9 @@ export default function BookDetailPage() {
   };
 
   const displayVolume = userBook?.volumeNumber || 0;
+  const backToSeries = params?.seriesId
+    ? `/books/series/${params.seriesId}`
+    : "/books";
 
   return (
     <div className="flex flex-col gap-6">
@@ -191,9 +190,9 @@ export default function BookDetailPage() {
           </div>
           <Link
             className="rounded-full border border-[#e4d8c7] px-4 py-2 text-xs text-[#5c5d63]"
-            href="/books"
+            href={backToSeries}
           >
-            一覧へ戻る
+            シリーズへ戻る
           </Link>
         </div>
         {error ? (
@@ -237,7 +236,7 @@ export default function BookDetailPage() {
             シリーズ判定
           </h2>
           <p className="mt-2 text-sm text-[#5c5d63]">
-            自動判定されたシリーズ情報を確認し、必要なら上書きしてください。
+            保存済みのシリーズ情報を確認し、必要なら上書きしてください。
           </p>
           <div className="mt-4 rounded-2xl border border-[#e4d8c7] bg-white p-4 text-sm text-[#5c5d63]">
             <div className="flex items-center justify-between">
@@ -307,20 +306,18 @@ export default function BookDetailPage() {
           </div>
         </div>
 
-        <div className="flex flex-col gap-6">
-          <div className="rounded-3xl border border-[#e4d8c7] bg-white/70 p-6 shadow-sm">
-            <h2 className="font-[var(--font-display)] text-2xl">お気に入り</h2>
-            <p className="mt-2 text-sm text-[#5c5d63]">
-              この巻またはシリーズをお気に入りに登録できます。
-            </p>
-            <div className="mt-4 flex gap-3">
-              <button className="rounded-full border border-[#e4d8c7] px-4 py-2 text-xs text-[#5c5d63]">
-                単巻で登録
-              </button>
-              <button className="rounded-full bg-[#c86b3c] px-4 py-2 text-xs text-white">
-                シリーズで登録
-              </button>
-            </div>
+        <div className="rounded-3xl border border-[#e4d8c7] bg-white/70 p-6 shadow-sm">
+          <h2 className="font-[var(--font-display)] text-2xl">お気に入り</h2>
+          <p className="mt-2 text-sm text-[#5c5d63]">
+            この巻またはシリーズをお気に入りに登録できます。
+          </p>
+          <div className="mt-4 flex gap-3">
+            <button className="rounded-full border border-[#e4d8c7] px-4 py-2 text-xs text-[#5c5d63]">
+              単巻で登録
+            </button>
+            <button className="rounded-full bg-[#c86b3c] px-4 py-2 text-xs text-white">
+              シリーズで登録
+            </button>
           </div>
         </div>
       </section>
