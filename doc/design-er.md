@@ -5,7 +5,6 @@
 - users 1 - n user_books
 - users 1 - n recommendations
 - users 1 - n favorites
-- users 1 - n tags
 - users 1 - n next_to_buy_manual
 - users n - n users (follows)
 
@@ -16,8 +15,6 @@
 - series 1 - n book_series_auto
 - series 1 - n user_book_series_override
 
-- user_books 1 - n book_tags
-- tags 1 - n book_tags
 
 ## シリーズ解決ロジック
 - series_id = coalesce(user_book_series_override.series_id, book_series_auto.series_id)

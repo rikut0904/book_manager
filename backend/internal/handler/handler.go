@@ -311,31 +311,31 @@ func (h *Handler) IsbnLookup(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	sharedKey, hasShared := h.openAIKeys.First()
-		apiKey := h.openAIAPIKey
-		if hasShared {
-			apiKey = sharedKey.APIKey
+	apiKey := h.openAIAPIKey
+	if hasShared {
+		apiKey = sharedKey.APIKey
+	}
+	if apiKey != "" {
+		rawTitle := book.OriginalTitle
+		if rawTitle == "" {
+			rawTitle = book.Title
 		}
-		if apiKey != "" {
-			rawTitle := book.OriginalTitle
-			if rawTitle == "" {
-				rawTitle = book.Title
-			}
-			model := h.openAIDefaultModel
-			if settings.OpenAIModel != "" {
-				model = settings.OpenAIModel
-			}
-			client := ai.NewOpenAIClient(apiKey, model, h.aiPrompt)
-			guess, err := client.GuessSeries(r.Context(), ai.SeriesInput{
-				Title:         rawTitle,
-				RawTitle:      rawTitle,
-				Authors:       book.Authors,
-				Publisher:     book.Publisher,
-				PublishedDate: book.PublishedDate,
-				ISBN13:        book.ISBN13,
-				SeriesName:    book.SeriesName,
+		model := h.openAIDefaultModel
+		if settings.OpenAIModel != "" {
+			model = settings.OpenAIModel
+		}
+		client := ai.NewOpenAIClient(apiKey, model, h.aiPrompt)
+		guess, err := client.GuessSeries(r.Context(), ai.SeriesInput{
+			Title:         rawTitle,
+			RawTitle:      rawTitle,
+			Authors:       book.Authors,
+			Publisher:     book.Publisher,
+			PublishedDate: book.PublishedDate,
+			ISBN13:        book.ISBN13,
+			SeriesName:    book.SeriesName,
 		})
 		if err != nil {
-				log.Printf("openai guess error: %v", err)
+			log.Printf("openai guess error: %v", err)
 		} else if guess.IsSeries && strings.TrimSpace(guess.Name) != "" {
 			seriesGuess = isbn.SeriesGuess{
 				Name:         guess.Name,
@@ -360,7 +360,11 @@ func (h *Handler) IsbnLookup(w http.ResponseWriter, r *http.Request) {
 			seriesID = item.ID
 		}
 	}
-	if seriesGuess.VolumeNumber > 0 {
+	if seriesGuess.Name != "" && book.SeriesName == "" {
+		book.SeriesName = seriesGuess.Name
+		_ = h.books.Update(book)
+	}
+	if seriesID != "" || seriesGuess.VolumeNumber > 0 {
 		userItems := h.userBooks.ListByUser(userID)
 		var userBookID string
 		for _, item := range userItems {
@@ -375,15 +379,18 @@ func (h *Handler) IsbnLookup(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if userBookID != "" {
-			volume := seriesGuess.VolumeNumber
-			input := userbooks.UpdateInput{
-				VolumeNumber: &volume,
-			}
+			input := userbooks.UpdateInput{}
 			if seriesID != "" {
 				seriesIDCopy := seriesID
 				input.SeriesID = &seriesIDCopy
 			}
-			_, _ = h.userBooks.Update(userBookID, input)
+			if seriesGuess.VolumeNumber > 0 {
+				volume := seriesGuess.VolumeNumber
+				input.VolumeNumber = &volume
+			}
+			if input.SeriesID != nil || input.VolumeNumber != nil {
+				_, _ = h.userBooks.Update(userBookID, input)
+			}
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{

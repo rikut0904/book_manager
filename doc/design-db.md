@@ -77,18 +77,6 @@
 - volume_number (nullable)
 - note
 
-### tags
-- id (PK)
-- owner_user_id
-- name
-- unique(owner_user_id, name)
-
-### book_tags
-- user_id
-- book_id
-- tag_id
-- unique(user_id, book_id, tag_id)
-
 ### recommendations
 - id (PK)
 - user_id (FK users)
@@ -122,7 +110,6 @@
 
 ## 主要インデックス
 - user_books(user_id)
-- book_tags(user_id, book_id)
 - recommendations(created_at)
 - follows(followee_id)
 - book_series_auto(series_id)

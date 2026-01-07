@@ -18,7 +18,7 @@
 
 ## 所蔵（ユーザー中心）
 - POST /user-books
-- GET /user-books?query=&tag=&series=&page=
+- GET /user-books?query=&series=&page=
 - PATCH /user-books/{id}
 - DELETE /user-books/{id}
 
@@ -36,13 +36,6 @@
 - POST /next-to-buy/manual
 - PATCH /next-to-buy/manual/{id}
 - DELETE /next-to-buy/manual/{id}
-
-## タグ
-- GET /tags
-- POST /tags
-- DELETE /tags/{id}
-- POST /book-tags
-- DELETE /book-tags
 
 ## おすすめ（全体公開）
 - GET /recommendations

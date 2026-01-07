@@ -34,21 +34,11 @@ export default function SettingsPage() {
         </p>
         <h1 className="mt-2 font-[var(--font-display)] text-3xl">設定</h1>
         <p className="mt-2 text-sm text-[#5c5d63]">
-          タグ・シリーズ・プロフィール・AIの設定へ移動します。
+          シリーズ・プロフィール・AIの設定へ移動します。
         </p>
       </section>
 
       <section className="grid gap-6 lg:grid-cols-[1fr_1fr]">
-        <Link
-          className="rounded-3xl border border-[#e4d8c7] bg-white/70 p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
-          href="/settings/tags"
-        >
-          <h2 className="font-[var(--font-display)] text-2xl">タグ管理</h2>
-          <p className="mt-2 text-sm text-[#5c5d63]">
-            タグの追加・削除を行います。
-          </p>
-        </Link>
-
         <Link
           className="rounded-3xl border border-[#e4d8c7] bg-white/70 p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
           href="/settings/series"

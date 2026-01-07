@@ -61,9 +61,6 @@ export default function BooksPage() {
           </div>
           <div className="flex flex-wrap gap-3">
             <button className="rounded-full border border-[#e4d8c7] px-4 py-2 text-xs text-[#5c5d63]">
-              タグ
-            </button>
-            <button className="rounded-full border border-[#e4d8c7] px-4 py-2 text-xs text-[#5c5d63]">
               シリーズ
             </button>
             <Link
