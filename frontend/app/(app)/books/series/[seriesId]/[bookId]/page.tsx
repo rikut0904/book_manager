@@ -17,16 +17,12 @@ type Book = {
   seriesName?: string;
 };
 
-type Series = {
-  id: string;
-  name: string;
-};
-
 type UserBook = {
   id: string;
   bookId: string;
   seriesId: string;
   volumeNumber: number;
+  note: string;
 };
 
 type Favorite = {
@@ -41,19 +37,9 @@ export default function SeriesBookDetailPage() {
   const bookId = params?.bookId;
   const [book, setBook] = useState<Book | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [seriesId, setSeriesId] = useState("");
-  const [seriesList, setSeriesList] = useState<Series[]>([]);
-  const [volumeNumber, setVolumeNumber] = useState("");
-  const [seriesMessage, setSeriesMessage] = useState<string | null>(null);
   const [userBook, setUserBook] = useState<UserBook | null>(null);
   const [deleteMessage, setDeleteMessage] = useState<string | null>(null);
   const [favorites, setFavorites] = useState<Favorite[]>([]);
-  const manualSeriesName =
-    seriesList.find((item) => item.id === seriesId)?.name || seriesId;
-  const storedSeriesName = userBook?.seriesId
-    ? seriesList.find((item) => item.id === userBook.seriesId)?.name ||
-      userBook.seriesId
-    : book?.seriesName || "未判定";
   const router = useRouter();
 
   useEffect(() => {
@@ -125,49 +111,11 @@ export default function SeriesBookDetailPage() {
     };
   }, [bookId]);
 
-  useEffect(() => {
-    let isMounted = true;
-    fetchJSON<{ items: Series[] }>("/series", { auth: true })
-      .then((data) => {
-        if (!isMounted) {
-          return;
-        }
-        setSeriesList(data.items ?? []);
-      })
-      .catch(() => {
-        if (!isMounted) {
-          return;
-        }
-        setSeriesList([]);
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  const handleSeriesOverride = async () => {
-    setSeriesMessage(null);
-    if (!bookId) {
+  const handleEdit = () => {
+    if (!bookId || !params?.seriesId) {
       return;
     }
-    if (!seriesId.trim() || !volumeNumber.trim()) {
-      setSeriesMessage("seriesId と巻数を入力してください。");
-      return;
-    }
-    try {
-      await fetchJSON("/user-series/override", {
-        method: "PATCH",
-        auth: true,
-        body: JSON.stringify({
-          bookId,
-          seriesId: seriesId.trim(),
-          volumeNumber: Number(volumeNumber),
-        }),
-      });
-      setSeriesMessage("シリーズを上書きしました。");
-    } catch {
-      setSeriesMessage("シリーズ上書きに失敗しました。");
-    }
+    router.push(`/books/series/${params.seriesId}/${bookId}/edit`);
   };
 
   const handleDeleteBook = async () => {
@@ -262,6 +210,13 @@ export default function SeriesBookDetailPage() {
             >
               {favorite ? "★" : "☆"}
             </button>
+            <button
+              className="rounded-full border border-[#e4d8c7] px-4 py-2 text-xs text-[#5c5d63] hover:bg-white"
+              type="button"
+              onClick={handleEdit}
+            >
+              編集
+            </button>
             <Link
               className="rounded-full border border-[#e4d8c7] px-4 py-2 text-xs text-[#5c5d63]"
               href={backToSeries}
@@ -305,83 +260,6 @@ export default function SeriesBookDetailPage() {
         </div>
       </section>
 
-      <section className="grid gap-6">
-        <div className="rounded-3xl border border-[#e4d8c7] bg-white/70 p-6 shadow-sm">
-          <h2 className="font-[var(--font-display)] text-2xl">
-            シリーズ判定
-          </h2>
-          <p className="mt-2 text-sm text-[#5c5d63]">
-            保存済みのシリーズ情報を確認し、必要なら上書きしてください。
-          </p>
-          <div className="mt-4 rounded-2xl border border-[#e4d8c7] bg-white p-4 text-sm text-[#5c5d63]">
-            <div className="flex items-center justify-between">
-              <span className="text-[#1b1c1f]">
-                {seriesId ? manualSeriesName || "未判定" : storedSeriesName}
-              </span>
-              <span>
-                {seriesId && volumeNumber
-                  ? `Vol.${volumeNumber}`
-                  : userBook?.volumeNumber
-                  ? `Vol.${userBook.volumeNumber}`
-                  : "--"}
-              </span>
-            </div>
-            <p className="mt-2 text-xs text-[#c86b3c]">
-              {seriesId
-                ? "手動入力"
-                : userBook?.seriesId
-                ? "保存済み"
-                : "未判定"}
-            </p>
-          </div>
-          <div className="mt-4 grid gap-3 text-sm">
-            <label className="text-[#1b1c1f]">
-              シリーズ名
-              <select
-                className="mt-2 w-full rounded-2xl border border-[#e4d8c7] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c86b3c]"
-                value={seriesId}
-                onChange={(event) => setSeriesId(event.target.value)}
-              >
-                <option value="">シリーズを選択</option>
-                {seriesList.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-[#1b1c1f]">
-              seriesId（直接入力）
-              <input
-                className="mt-2 w-full rounded-2xl border border-[#e4d8c7] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c86b3c]"
-                value={seriesId}
-                onChange={(event) => setSeriesId(event.target.value)}
-                placeholder="series_123"
-              />
-            </label>
-            <label className="text-[#1b1c1f]">
-              巻数
-              <input
-                className="mt-2 w-full rounded-2xl border border-[#e4d8c7] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c86b3c]"
-                value={volumeNumber}
-                onChange={(event) => setVolumeNumber(event.target.value)}
-                placeholder="3"
-              />
-            </label>
-            {seriesMessage ? (
-              <p className="text-xs text-[#5c5d63]">{seriesMessage}</p>
-            ) : null}
-            <button
-              className="rounded-full bg-[#1b1c1f] px-5 py-3 text-sm font-medium text-white"
-              type="button"
-              onClick={handleSeriesOverride}
-            >
-              上書き保存
-            </button>
-          </div>
-        </div>
-
-      </section>
     </div>
   );
 }
