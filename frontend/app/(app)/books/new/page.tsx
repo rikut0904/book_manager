@@ -60,12 +60,15 @@ export default function BookNewPage() {
     }
     try {
       const volumeValue = manualForm.volumeNumber.trim();
-      const volumeNumber = volumeValue ? Number(volumeValue) : null;
+      const volumeNumber = volumeValue ? Number(volumeValue) : undefined;
       if (manualForm.isSeries && !manualForm.seriesName.trim()) {
         setManualError("シリーズ名を入力してください。");
         return;
       }
-      if (volumeValue && (!Number.isFinite(volumeNumber) || volumeNumber <= 0)) {
+      if (
+        volumeNumber !== undefined &&
+        (!Number.isFinite(volumeNumber) || volumeNumber <= 0)
+      ) {
         setManualError("巻数は正の数値で入力してください。");
         return;
       }
@@ -81,7 +84,7 @@ export default function BookNewPage() {
           isbn13: manualForm.isbn13.trim(),
           isSeries: manualForm.isSeries,
           seriesName: manualForm.isSeries ? manualForm.seriesName.trim() : "",
-          volumeNumber: manualForm.isSeries && volumeNumber ? volumeNumber : undefined,
+          volumeNumber: manualForm.isSeries ? volumeNumber : undefined,
         }),
       });
       setManualSuccess(`登録しました: ${data.title}`);
