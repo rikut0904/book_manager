@@ -247,7 +247,9 @@ export default function BookDetailPage() {
           </div>
           <div className="rounded-2xl border border-[#e4d8c7] bg-white/70 p-4 text-sm text-[#5c5d63]">
             <p className="text-xs text-[#c86b3c]">所蔵メモ</p>
-            <p className="mt-2 text-[#1b1c1f]">サイン本</p>
+            <p className="mt-2 text-[#1b1c1f]">
+              {userBook?.note || ""}
+            </p>
           </div>
         </div>
         <div className="mt-6 flex justify-end">

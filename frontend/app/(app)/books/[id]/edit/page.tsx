@@ -272,7 +272,7 @@ export default function BookEditPage() {
                   ? `Vol.${userBook.volumeNumber}`
                   : "未判定"}
               </p>
-              <p>所蔵メモ: {userBook?.note || "未登録"}</p>
+              <p>所蔵メモ: {userBook?.note || ""}</p>
             </div>
           </div>
 
