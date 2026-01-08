@@ -276,10 +276,13 @@ export default function BookEditPage() {
             </div>
           </div>
 
-          <div className="rounded-3xl border border-[#e4d8c7] bg-white/70 p-6 shadow-sm">
-            <h2 className="font-[var(--font-display)] text-2xl">
-              シリーズ情報
-            </h2>
+          <details className="rounded-3xl border border-[#e4d8c7] bg-white/70 p-6 shadow-sm">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 font-[var(--font-display)] text-2xl">
+              <span>シリーズ情報</span>
+              <span className="rounded-full border border-[#e4d8c7] px-3 py-1 text-xs text-[#5c5d63]">
+                編集する ▼
+              </span>
+            </summary>
             <p className="mt-2 text-sm text-[#5c5d63]">
               シリーズか単行本かを選択して保存します。
             </p>
@@ -336,7 +339,7 @@ export default function BookEditPage() {
             >
               シリーズ判定を保存
             </button>
-          </div>
+          </details>
 
           <div className="rounded-3xl border border-[#e4d8c7] bg-white/70 p-6 shadow-sm">
             <h2 className="font-[var(--font-display)] text-2xl">所蔵メモ</h2>

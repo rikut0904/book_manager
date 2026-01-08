@@ -270,10 +270,13 @@ export default function SeriesBookEditPage() {
             </div>
           </div>
 
-          <div className="rounded-3xl border border-[#e4d8c7] bg-white/70 p-6 shadow-sm">
-            <h2 className="font-[var(--font-display)] text-2xl">
-              シリーズ判定
-            </h2>
+          <details className="rounded-3xl border border-[#e4d8c7] bg-white/70 p-6 shadow-sm">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 font-[var(--font-display)] text-2xl">
+              <span>シリーズ判定</span>
+              <span className="rounded-full border border-[#e4d8c7] px-3 py-1 text-xs text-[#5c5d63]">
+                編集する ▼
+              </span>
+            </summary>
             <p className="mt-2 text-sm text-[#5c5d63]">
               シリーズか単行本かを選択して保存します。
             </p>
@@ -310,15 +313,6 @@ export default function SeriesBookEditPage() {
                   </select>
                 </label>
                 <label className="text-[#1b1c1f]">
-                  seriesId（直接入力）
-                  <input
-                    className="mt-2 w-full rounded-2xl border border-[#e4d8c7] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c86b3c]"
-                    value={seriesId}
-                    onChange={(event) => setSeriesId(event.target.value)}
-                    placeholder="series_123"
-                  />
-                </label>
-                <label className="text-[#1b1c1f]">
                   巻数
                   <input
                     className="mt-2 w-full rounded-2xl border border-[#e4d8c7] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c86b3c]"
@@ -339,7 +333,7 @@ export default function SeriesBookEditPage() {
             >
               シリーズ判定を保存
             </button>
-          </div>
+          </details>
 
           <div className="rounded-3xl border border-[#e4d8c7] bg-white/70 p-6 shadow-sm">
             <h2 className="font-[var(--font-display)] text-2xl">所蔵メモ</h2>
