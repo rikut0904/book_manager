@@ -23,6 +23,7 @@ func (r *UserBookRepository) Create(userBook domain.UserBook) error {
 		AcquiredAt:   userBook.AcquiredAt,
 		SeriesID:     userBook.SeriesID,
 		VolumeNumber: valueOrNilInt(userBook.VolumeNumber),
+		SeriesSource: userBook.SeriesSource,
 	}
 	if err := r.db.Create(&model).Error; err != nil {
 		if isUniqueViolation(err) {
@@ -86,6 +87,7 @@ func (r *UserBookRepository) Update(userBook domain.UserBook) bool {
 		AcquiredAt:   userBook.AcquiredAt,
 		SeriesID:     userBook.SeriesID,
 		VolumeNumber: valueOrNilInt(userBook.VolumeNumber),
+		SeriesSource: userBook.SeriesSource,
 	}
 	if err := r.db.Save(&model).Error; err != nil {
 		return false
@@ -109,6 +111,7 @@ func modelToDomainUserBook(model UserBook) domain.UserBook {
 		AcquiredAt:   model.AcquiredAt,
 		SeriesID:     model.SeriesID,
 		VolumeNumber: valueOrZeroInt(model.VolumeNumber),
+		SeriesSource: model.SeriesSource,
 	}
 }
 

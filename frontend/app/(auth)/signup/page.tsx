@@ -36,7 +36,7 @@ export default function SignupPage() {
         userId: data.user.id,
       });
       router.push("/books");
-    } catch (err) {
+    } catch {
       setError("登録に失敗しました。");
     } finally {
       setIsSubmitting(false);

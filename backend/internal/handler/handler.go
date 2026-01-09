@@ -388,6 +388,8 @@ func (h *Handler) IsbnLookup(w http.ResponseWriter, r *http.Request) {
 				volume := seriesGuess.VolumeNumber
 				input.VolumeNumber = &volume
 			}
+			source := "auto"
+			input.SeriesSource = &source
 			if input.SeriesID != nil || input.VolumeNumber != nil {
 				_, _ = h.userBooks.Update(userBookID, input)
 			}
@@ -480,6 +482,10 @@ func (h *Handler) Books(w http.ResponseWriter, r *http.Request) {
 				if req.VolumeNumber != nil {
 					volume := *req.VolumeNumber
 					input.VolumeNumber = &volume
+				}
+				if seriesID != "" {
+					source := "manual"
+					input.SeriesSource = &source
 				}
 				if input.SeriesID != nil || input.VolumeNumber != nil {
 					_, _ = h.userBooks.Update(userBookID, input)
@@ -687,22 +693,37 @@ func (h *Handler) UserSeriesOverride(w http.ResponseWriter, r *http.Request) {
 		SeriesID     string `json:"seriesId"`
 		VolumeNumber *int   `json:"volumeNumber"`
 		UserID       string `json:"userId"`
+		IsSeries     *bool  `json:"isSeries"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		badRequest(w, "invalid json")
 		return
 	}
-	if strings.TrimSpace(req.BookID) == "" || strings.TrimSpace(req.SeriesID) == "" {
-		badRequest(w, "bookId and seriesId are required")
+	if strings.TrimSpace(req.BookID) == "" {
+		badRequest(w, "bookId is required")
 		return
 	}
-	if req.VolumeNumber == nil {
-		badRequest(w, "volumeNumber is required")
-		return
+	isSeries := true
+	if req.IsSeries != nil {
+		isSeries = *req.IsSeries
 	}
-	if *req.VolumeNumber <= 0 {
-		badRequest(w, "volumeNumber must be positive")
-		return
+	if isSeries {
+		if strings.TrimSpace(req.SeriesID) == "" {
+			badRequest(w, "seriesId is required")
+			return
+		}
+		if req.VolumeNumber == nil {
+			badRequest(w, "volumeNumber is required")
+			return
+		}
+		if *req.VolumeNumber <= 0 {
+			badRequest(w, "volumeNumber must be positive")
+			return
+		}
+	} else {
+		req.SeriesID = ""
+		zero := 0
+		req.VolumeNumber = &zero
 	}
 	userID := strings.TrimSpace(req.UserID)
 	if userID == "" {
@@ -715,9 +736,11 @@ func (h *Handler) UserSeriesOverride(w http.ResponseWriter, r *http.Request) {
 		}
 		seriesID := req.SeriesID
 		volume := *req.VolumeNumber
+		source := "manual"
 		updated, ok := h.userBooks.Update(item.ID, userbooks.UpdateInput{
 			SeriesID:     &seriesID,
 			VolumeNumber: &volume,
+			SeriesSource: &source,
 		})
 		if !ok {
 			internalError(w)
@@ -733,9 +756,11 @@ func (h *Handler) UserSeriesOverride(w http.ResponseWriter, r *http.Request) {
 	}
 	seriesID := req.SeriesID
 	volume := *req.VolumeNumber
+	source := "manual"
 	updated, ok := h.userBooks.Update(created.ID, userbooks.UpdateInput{
 		SeriesID:     &seriesID,
 		VolumeNumber: &volume,
+		SeriesSource: &source,
 	})
 	if !ok {
 		internalError(w)

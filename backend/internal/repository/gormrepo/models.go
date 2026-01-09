@@ -14,8 +14,8 @@ type User struct {
 }
 
 type ProfileSettings struct {
-	UserID     string `gorm:"primaryKey"`
-	Visibility string
+	UserID        string `gorm:"primaryKey"`
+	Visibility    string
 	OpenAIEnabled bool
 	OpenAIModel   string
 	OpenAIAPIKey  string
@@ -42,6 +42,7 @@ type UserBook struct {
 	AcquiredAt   string
 	SeriesID     string
 	VolumeNumber *int
+	SeriesSource string
 }
 
 type Favorite struct {

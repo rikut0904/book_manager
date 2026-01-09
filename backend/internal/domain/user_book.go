@@ -8,4 +8,5 @@ type UserBook struct {
 	AcquiredAt   string `json:"acquiredAt"`
 	SeriesID     string `json:"seriesId"`
 	VolumeNumber int    `json:"volumeNumber"`
+	SeriesSource string `json:"seriesSource"`
 }
