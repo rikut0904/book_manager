@@ -62,7 +62,7 @@ export default function BookDetailPage() {
     return () => {
       isMounted = false;
     };
-  }, [params?.id]);
+  }, [params?.id, router]);
 
   useEffect(() => {
     let isMounted = true;
@@ -113,7 +113,7 @@ export default function BookDetailPage() {
     return () => {
       isMounted = false;
     };
-  }, [params?.id]);
+  }, [params?.id, router]);
 
   const handleEdit = () => {
     if (!params?.id) {
