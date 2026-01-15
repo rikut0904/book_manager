@@ -48,6 +48,10 @@ func unauthorized(w http.ResponseWriter) {
 	})
 }
 
+func Unauthorized(w http.ResponseWriter) {
+	unauthorized(w)
+}
+
 func forbidden(w http.ResponseWriter, message string) {
 	writeJSON(w, http.StatusForbidden, map[string]string{
 		"error":   "forbidden",
@@ -66,6 +70,10 @@ func internalError(w http.ResponseWriter) {
 	writeJSON(w, http.StatusInternalServerError, map[string]string{
 		"error": "internal server error",
 	})
+}
+
+func InternalError(w http.ResponseWriter) {
+	internalError(w)
 }
 
 func decodeJSON(r *http.Request, dst any) error {

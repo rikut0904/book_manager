@@ -14,6 +14,7 @@ type Book = {
   publisher: string;
   publishedDate: string;
   thumbnailUrl: string;
+  seriesName?: string;
 };
 
 type UserBook = {
@@ -23,11 +24,6 @@ type UserBook = {
   volumeNumber: number;
 };
 
-type Series = {
-  id: string;
-  name: string;
-};
-
 type Favorite = {
   id: string;
   type: "book" | "series";
@@ -35,38 +31,72 @@ type Favorite = {
   seriesId: string;
 };
 
+type SeriesBookItem = UserBook & {
+  book: Book;
+};
+
 export default function SeriesDetailPage() {
   const params = useParams<{ seriesId: string }>();
-  const [books, setBooks] = useState<Book[]>([]);
-  const [userBooks, setUserBooks] = useState<UserBook[]>([]);
-  const [seriesList, setSeriesList] = useState<Series[]>([]);
+  const [seriesName, setSeriesName] = useState("未判定");
+  const [seriesBooks, setSeriesBooks] = useState<SeriesBookItem[]>([]);
   const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    if (!params?.seriesId) {
+      return;
+    }
     let isMounted = true;
     const load = async () => {
+      setIsLoading(true);
+      setError(null);
       try {
-        const [booksRes, userBooksRes, seriesRes, favoritesRes] =
-          await Promise.all([
-            fetchJSON<{ items: Book[] }>("/books", { auth: true }),
-            fetchJSON<{ items: UserBook[] }>("/user-books", { auth: true }).catch(
-              () => ({ items: [] })
-            ),
-            fetchJSON<{ items: Series[] }>("/series", { auth: true }).catch(
-              () => ({ items: [] })
-            ),
-            fetchJSON<{ items: Favorite[] }>("/favorites", { auth: true }).catch(
-              () => ({ items: [] })
-            ),
-          ]);
+        const [userBooksRes, favoritesRes] = await Promise.all([
+          fetchJSON<{ items: UserBook[] }>(
+            `/user-books?series=${encodeURIComponent(params.seriesId)}`,
+            { auth: true }
+          ).catch(() => ({ items: [] })),
+          fetchJSON<{ items: Favorite[] }>("/favorites", { auth: true }).catch(
+            () => ({ items: [] })
+          ),
+        ]);
+        const items = userBooksRes.items ?? [];
+        const bookResults = await Promise.all(
+          items.map((item) =>
+            fetchJSON<Book>(`/books/${item.bookId}`, { auth: true }).catch(
+              () => null
+            )
+          )
+        );
         if (!isMounted) {
           return;
         }
-        setBooks(booksRes.items ?? []);
-        setUserBooks(userBooksRes.items ?? []);
-        setSeriesList(seriesRes.items ?? []);
+        const booksById = new Map(
+          bookResults
+            .filter((book): book is Book => Boolean(book))
+            .map((book) => [book.id, book])
+        );
+        const mapped = items
+          .map((item) => {
+            const book = booksById.get(item.bookId);
+            if (!book) {
+              return null;
+            }
+            return { ...item, book };
+          })
+          .filter((item): item is SeriesBookItem => Boolean(item))
+          .sort((a, b) => {
+            const aVolume = a.volumeNumber || Number.MAX_SAFE_INTEGER;
+            const bVolume = b.volumeNumber || Number.MAX_SAFE_INTEGER;
+            if (aVolume !== bVolume) {
+              return aVolume - bVolume;
+            }
+            return (a.book?.title || "").localeCompare(b.book?.title || "", "ja");
+          });
+        const firstBook = mapped[0]?.book;
+        setSeriesName(firstBook?.seriesName || "未判定");
+        setSeriesBooks(mapped);
         setFavorites(favoritesRes.items ?? []);
       } catch {
         if (!isMounted) {
@@ -84,7 +114,7 @@ export default function SeriesDetailPage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [params?.seriesId]);
 
   const favoriteBySeriesId = useMemo(() => {
     const map = new Map<string, Favorite>();
@@ -95,29 +125,6 @@ export default function SeriesDetailPage() {
       });
     return map;
   }, [favorites]);
-
-  const { seriesName, seriesBooks } = useMemo(() => {
-    const seriesId = params?.seriesId || "";
-    const seriesName =
-      seriesList.find((item) => item.id === seriesId)?.name || "未判定";
-    const booksById = new Map(books.map((book) => [book.id, book]));
-    const seriesBooks = userBooks
-      .filter((item) => item.seriesId === seriesId)
-      .map((item) => ({
-        ...item,
-        book: booksById.get(item.bookId),
-      }))
-      .filter((item) => item.book)
-      .sort((a, b) => {
-        const aVolume = a.volumeNumber || Number.MAX_SAFE_INTEGER;
-        const bVolume = b.volumeNumber || Number.MAX_SAFE_INTEGER;
-        if (aVolume !== bVolume) {
-          return aVolume - bVolume;
-        }
-        return (a.book?.title || "").localeCompare(b.book?.title || "", "ja");
-      });
-    return { seriesName, seriesBooks };
-  }, [books, params?.seriesId, seriesList, userBooks]);
 
   const authors = useMemo(() => {
     const items = seriesBooks.flatMap((item) => item.book?.authors || []);
