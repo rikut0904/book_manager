@@ -98,14 +98,10 @@ export default function AISettingsPage() {
     };
   }, [isAdmin]);
 
-  useEffect(() => {
-    if (models.length === 0) {
-      return;
-    }
-    if (!models.includes(openaiModel)) {
-      setOpenAIModel(models[0]);
-    }
-  }, [models, openaiModel]);
+  const resolvedModel =
+    models.length > 0 && !models.includes(openaiModel)
+      ? models[0]
+      : openaiModel;
 
   const handleSave = async () => {
     setSettingError(null);
@@ -115,7 +111,7 @@ export default function AISettingsPage() {
         method: "PATCH",
         auth: true,
         body: JSON.stringify({
-          openaiModel: openaiModel.trim(),
+          openaiModel: resolvedModel.trim(),
         }),
       });
       setSettingMessage("AI設定を保存しました。");
@@ -184,7 +180,7 @@ export default function AISettingsPage() {
             <p className="text-xs text-[#5c5d63]">モデル名（共有キーで利用）</p>
             <select
               className="mt-2 w-full rounded-2xl border border-[#e4d8c7] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c86b3c]"
-              value={openaiModel}
+              value={resolvedModel}
               onChange={(event) => setOpenAIModel(event.target.value)}
               disabled={!isAdmin}
             >

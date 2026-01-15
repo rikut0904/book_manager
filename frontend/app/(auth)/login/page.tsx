@@ -32,7 +32,7 @@ export default function LoginPage() {
         userId: data.user.id,
       });
       router.push("/books");
-    } catch (err) {
+    } catch {
       setError("ログインに失敗しました。");
     } finally {
       setIsSubmitting(false);

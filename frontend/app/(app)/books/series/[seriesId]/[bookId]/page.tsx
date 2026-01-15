@@ -32,8 +32,9 @@ type Favorite = {
   seriesId: string;
 };
 
-export default function BookDetailPage() {
-  const params = useParams<{ id: string }>();
+export default function SeriesBookDetailPage() {
+  const params = useParams<{ seriesId: string; bookId: string }>();
+  const bookId = params?.bookId;
   const [book, setBook] = useState<Book | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [userBook, setUserBook] = useState<UserBook | null>(null);
@@ -42,11 +43,11 @@ export default function BookDetailPage() {
   const router = useRouter();
 
   useEffect(() => {
-    if (!params?.id) {
+    if (!bookId) {
       return;
     }
     let isMounted = true;
-    fetchJSON<Book>(`/books/${params.id}`, { auth: true })
+    fetchJSON<Book>(`/books/${bookId}`, { auth: true })
       .then((data) => {
         if (!isMounted) {
           return;
@@ -62,7 +63,7 @@ export default function BookDetailPage() {
     return () => {
       isMounted = false;
     };
-  }, [params?.id, router]);
+  }, [bookId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -85,24 +86,19 @@ export default function BookDetailPage() {
   }, []);
 
   useEffect(() => {
-    if (!params?.id) {
+    if (!bookId) {
       return;
     }
     let isMounted = true;
     fetchJSON<{ items: UserBook[] }>(
-      `/user-books?bookId=${encodeURIComponent(params.id)}`,
+      `/user-books?bookId=${encodeURIComponent(bookId)}`,
       { auth: true }
     )
       .then((data) => {
         if (!isMounted) {
           return;
         }
-        const item = data.items?.[0] ?? null;
-        if (item?.seriesId) {
-          router.replace(`/books/series/${item.seriesId}/${params.id}`);
-          return;
-        }
-        setUserBook(item);
+        setUserBook(data.items?.[0] ?? null);
       })
       .catch(() => {
         if (!isMounted) {
@@ -113,25 +109,25 @@ export default function BookDetailPage() {
     return () => {
       isMounted = false;
     };
-  }, [params?.id, router]);
+  }, [bookId]);
 
   const handleEdit = () => {
-    if (!params?.id) {
+    if (!bookId || !params?.seriesId) {
       return;
     }
-    router.push(`/books/${params.id}/edit`);
+    router.push(`/books/series/${params.seriesId}/${bookId}/edit`);
   };
 
   const handleDeleteBook = async () => {
     setDeleteMessage(null);
-    if (!params?.id) {
+    if (!bookId) {
       return;
     }
     if (!window.confirm("この書籍を削除しますか？")) {
       return;
     }
     try {
-      await fetchJSON(`/books/${params.id}`, {
+      await fetchJSON(`/books/${bookId}`, {
         method: "DELETE",
         auth: true,
       });
@@ -142,11 +138,11 @@ export default function BookDetailPage() {
   };
 
   const handleToggleFavorite = async () => {
-    if (!params?.id) {
+    if (!bookId) {
       return;
     }
     const existing = favorites.find(
-      (item) => item.type === "book" && item.bookId === params.id
+      (item) => item.type === "book" && item.bookId === bookId
     );
     try {
       if (existing) {
@@ -161,7 +157,7 @@ export default function BookDetailPage() {
           auth: true,
           body: JSON.stringify({
             type: "book",
-            bookId: params.id,
+            bookId,
           }),
         });
         setFavorites((prev) => [...prev, created]);
@@ -173,8 +169,11 @@ export default function BookDetailPage() {
 
   const displayVolume = userBook?.volumeNumber || 0;
   const favorite = favorites.find(
-    (item) => item.type === "book" && item.bookId === params?.id
+    (item) => item.type === "book" && item.bookId === bookId
   );
+  const backToSeries = params?.seriesId
+    ? `/books/series/${params.seriesId}`
+    : "/books";
 
   return (
     <div className="flex flex-col gap-6">
@@ -220,9 +219,9 @@ export default function BookDetailPage() {
             </button>
             <Link
               className="rounded-full border border-[#e4d8c7] px-4 py-2 text-xs text-[#5c5d63]"
-              href="/books"
+              href={backToSeries}
             >
-              一覧へ戻る
+              シリーズへ戻る
             </Link>
           </div>
         </div>

@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import type { MouseEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { fetchJSON } from "@/lib/api";
 
@@ -14,38 +15,155 @@ type Book = {
   thumbnailUrl: string;
   isbn13: string;
   source: string;
+  seriesName?: string;
+};
+
+type UserBook = {
+  id: string;
+  bookId: string;
+  seriesId: string;
+  volumeNumber: number;
+};
+
+type Series = {
+  id: string;
+  name: string;
+};
+
+type Favorite = {
+  id: string;
+  type: "book" | "series";
+  bookId: string;
+  seriesId: string;
 };
 
 export default function BooksPage() {
   const [items, setItems] = useState<Book[]>([]);
+  const [userBooks, setUserBooks] = useState<UserBook[]>([]);
+  const [seriesList, setSeriesList] = useState<Series[]>([]);
+  const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
-    fetchJSON<{ items: Book[] }>("/books", { auth: true })
-      .then((data) => {
+    const load = async () => {
+      try {
+        const [booksRes, userBooksRes, seriesRes, favoritesRes] =
+          await Promise.all([
+            fetchJSON<{ items: Book[] }>("/books", { auth: true }),
+            fetchJSON<{ items: UserBook[] }>("/user-books", { auth: true }).catch(
+              () => ({ items: [] })
+            ),
+            fetchJSON<{ items: Series[] }>("/series", { auth: true }).catch(
+              () => ({ items: [] })
+            ),
+            fetchJSON<{ items: Favorite[] }>("/favorites", { auth: true }).catch(
+              () => ({ items: [] })
+            ),
+          ]);
         if (!isMounted) {
           return;
         }
-        setItems(data.items ?? []);
-      })
-      .catch(() => {
+        setItems(booksRes.items ?? []);
+        setUserBooks(userBooksRes.items ?? []);
+        setSeriesList(seriesRes.items ?? []);
+        setFavorites(favoritesRes.items ?? []);
+      } catch {
         if (!isMounted) {
           return;
         }
         setError("書籍一覧を取得できませんでした。");
-      })
-      .finally(() => {
+      } finally {
         if (!isMounted) {
           return;
         }
         setIsLoading(false);
-      });
+      }
+    };
+    load();
     return () => {
       isMounted = false;
     };
   }, []);
+
+  const favoritesBySeriesId = useMemo(() => {
+    const map = new Map<string, Favorite>();
+    favorites
+      .filter((item) => item.type === "series" && item.seriesId)
+      .forEach((item) => {
+        map.set(item.seriesId, item);
+      });
+    return map;
+  }, [favorites]);
+
+  const { seriesCards, singleBooks } = useMemo(() => {
+    const booksById = new Map(items.map((book) => [book.id, book]));
+    const seriesById = new Map(seriesList.map((series) => [series.id, series]));
+    const grouped = new Map<
+      string,
+      { seriesId: string; name: string; books: Book[] }
+    >();
+    const seriesBookIDs = new Set<string>();
+    userBooks.forEach((item) => {
+      if (!item.seriesId) {
+        return;
+      }
+      const book = booksById.get(item.bookId);
+      if (!book) {
+        return;
+      }
+      seriesBookIDs.add(book.id);
+      const existing = grouped.get(item.seriesId);
+      if (existing) {
+        existing.books.push(book);
+      } else {
+        grouped.set(item.seriesId, {
+          seriesId: item.seriesId,
+          name:
+            seriesById.get(item.seriesId)?.name ||
+            book.seriesName ||
+            "未判定",
+          books: [book],
+        });
+      }
+    });
+    const seriesCards = Array.from(grouped.values()).sort((a, b) =>
+      a.name.localeCompare(b.name, "ja")
+    );
+    const singleBooks = items.filter((book) => !seriesBookIDs.has(book.id));
+    return { seriesCards, singleBooks };
+  }, [items, seriesList, userBooks]);
+
+  const handleToggleSeriesFavorite = async (
+    seriesId: string,
+    event: MouseEvent<HTMLButtonElement>
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const existing = favoritesBySeriesId.get(seriesId);
+    try {
+      if (existing) {
+        await fetchJSON(`/favorites/${existing.id}`, {
+          method: "DELETE",
+          auth: true,
+        });
+        setFavorites((prev) => prev.filter((item) => item.id !== existing.id));
+      } else {
+        const created = await fetchJSON<Favorite>("/favorites", {
+          method: "POST",
+          auth: true,
+          body: JSON.stringify({
+            type: "series",
+            seriesId,
+          }),
+        });
+        setFavorites((prev) => [...prev, created]);
+      }
+    } catch {
+      setError("お気に入りの更新に失敗しました。");
+    }
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -100,7 +218,54 @@ export default function BooksPage() {
             まだ登録された書籍がありません。
           </div>
         ) : null}
-        {items.map((book, index) => (
+        {seriesCards.map((series) => {
+          const favorite = favoritesBySeriesId.get(series.seriesId);
+          const authors = Array.from(
+            new Set(
+              series.books.flatMap((book) => book.authors || []).filter(Boolean)
+            )
+          );
+          return (
+            <Link
+              key={series.seriesId}
+              className="group rounded-3xl border border-[#e4d8c7] bg-white/70 p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
+              href={`/books/series/${series.seriesId}`}
+            >
+              <div className="flex items-start justify-between gap-3 text-xs text-[#5c5d63]">
+                <span>シリーズ</span>
+                <button
+                  aria-label={
+                    favorite ? "シリーズのお気に入り解除" : "シリーズをお気に入り登録"
+                  }
+                  className={`flex h-8 w-8 items-center justify-center rounded-full border text-sm transition ${
+                    favorite
+                      ? "border-[#c86b3c] bg-[#c86b3c] text-white"
+                      : "border-[#e4d8c7] text-[#5c5d63] hover:bg-white"
+                  }`}
+                  type="button"
+                  onClick={(event) =>
+                    handleToggleSeriesFavorite(series.seriesId, event)
+                  }
+                >
+                  {favorite ? "★" : "☆"}
+                </button>
+              </div>
+              <h2 className="mt-4 font-[var(--font-display)] text-xl text-[#1b1c1f]">
+                {series.name}
+              </h2>
+              <p className="mt-2 text-sm text-[#5c5d63]">
+                {authors.length > 0 ? authors.join(" / ") : "著者未登録"}
+              </p>
+              <div className="mt-4 rounded-2xl bg-[#f6f1e7] px-3 py-2 text-xs text-[#5c5d63]">
+                巻数合計: {series.books.length}
+              </div>
+              <p className="mt-4 text-xs text-[#c86b3c]">
+                シリーズ詳細を見る →
+              </p>
+            </Link>
+          );
+        })}
+        {singleBooks.map((book, index) => (
           <Link
             key={book.id || book.isbn13 || `book-${index}`}
             className="group rounded-3xl border border-[#e4d8c7] bg-white/70 p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
