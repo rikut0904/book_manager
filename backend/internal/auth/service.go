@@ -16,6 +16,7 @@ import (
 var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrUserExists         = errors.New("user already exists")
+	ErrUsernameExists     = errors.New("username already exists")
 )
 
 type Service struct {
@@ -60,6 +61,9 @@ func (s *Service) SeedUser(id, email, username, password string) error {
 }
 
 func (s *Service) Signup(email, password, username string) (AuthResult, error) {
+	if _, ok := s.users.FindByUsername(username); ok {
+		return AuthResult{}, ErrUsernameExists
+	}
 	hashed, err := hashPassword(password)
 	if err != nil {
 		return AuthResult{}, err

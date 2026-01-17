@@ -46,6 +46,19 @@ func (r *UserRepository) FindByEmail(email string) (domain.User, bool) {
 	}, true
 }
 
+func (r *UserRepository) FindByUsername(username string) (domain.User, bool) {
+	var model User
+	if err := r.db.Where("username = ?", username).First(&model).Error; err != nil {
+		return domain.User{}, false
+	}
+	return domain.User{
+		ID:           model.ID,
+		Email:        model.Email,
+		Username:     model.Username,
+		PasswordHash: model.PasswordHash,
+	}, true
+}
+
 func (r *UserRepository) FindByID(id string) (domain.User, bool) {
 	var model User
 	if err := r.db.First(&model, "id = ?", id).Error; err != nil {

@@ -139,7 +139,7 @@ func main() {
 		cfg.OpenAIAPIKey,
 		cfg.OpenAIDefaultModel,
 		aiPrompt,
-		parseAdminUserIDs(cfg.AdminUserIDs),
+		parseAdminUsernames(cfg.AdminUsernames),
 	)
 	r := router.New(h, auditLogRepo, cfg.CORSAllowedOrigins)
 
@@ -180,20 +180,20 @@ func loadPrompt(path string) string {
 	return string(data)
 }
 
-func parseAdminUserIDs(value string) []string {
+func parseAdminUsernames(value string) []string {
 	if strings.TrimSpace(value) == "" {
 		return nil
 	}
 	parts := strings.Split(value, ",")
-	ids := make([]string, 0, len(parts))
+	usernames := make([]string, 0, len(parts))
 	for _, part := range parts {
-		id := strings.TrimSpace(part)
-		if id == "" {
+		username := strings.TrimSpace(part)
+		if username == "" {
 			continue
 		}
-		ids = append(ids, id)
+		usernames = append(usernames, username)
 	}
-	return ids
+	return usernames
 }
 
 func normalizeBooks(bookService *books.Service) int {

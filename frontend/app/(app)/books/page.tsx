@@ -100,6 +100,7 @@ export default function BooksPage() {
   const { seriesCards, singleBooks } = useMemo(() => {
     const booksById = new Map(items.map((book) => [book.id, book]));
     const seriesById = new Map(seriesList.map((series) => [series.id, series]));
+    const userBookIds = new Set(userBooks.map((ub) => ub.bookId));
     const grouped = new Map<
       string,
       { seriesId: string; name: string; books: Book[] }
@@ -131,7 +132,9 @@ export default function BooksPage() {
     const seriesCards = Array.from(grouped.values()).sort((a, b) =>
       a.name.localeCompare(b.name, "ja")
     );
-    const singleBooks = items.filter((book) => !seriesBookIDs.has(book.id));
+    const singleBooks = items.filter(
+      (book) => userBookIds.has(book.id) && !seriesBookIDs.has(book.id)
+    );
     return { seriesCards, singleBooks };
   }, [items, seriesList, userBooks]);
 

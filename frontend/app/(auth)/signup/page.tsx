@@ -7,6 +7,18 @@ import { useState } from "react";
 import { fetchJSON } from "@/lib/api";
 import { setAuthState } from "@/lib/auth";
 
+const errorMessages: Record<string, string> = {
+  email_required: "メールアドレスを入力してください。",
+  password_required: "パスワードを入力してください。",
+  invalid_email: "メールアドレスの形式が正しくありません。",
+  password_too_short: "パスワードは8文字以上で入力してください。",
+  username_required: "表示名を入力してください。",
+  username_too_short: "表示名は2文字以上で入力してください。",
+  username_too_long: "表示名は20文字以内で入力してください。",
+  email_exists: "このメールアドレスは既に登録されています。",
+  username_exists: "この表示名は既に使用されています。",
+};
+
 export default function SignupPage() {
   const router = useRouter();
   const [form, setForm] = useState({
@@ -36,8 +48,9 @@ export default function SignupPage() {
         userId: data.user.id,
       });
       router.push("/books");
-    } catch {
-      setError("登録に失敗しました。");
+    } catch (err) {
+      const message = err instanceof Error ? err.message.trim() : "";
+      setError(errorMessages[message] || "登録に失敗しました。");
     } finally {
       setIsSubmitting(false);
     }
@@ -77,6 +90,9 @@ export default function SignupPage() {
                 setForm((prev) => ({ ...prev, username: event.target.value }))
               }
             />
+            <span className="mt-1 block text-xs text-[#5c5d63]">
+              2〜20文字
+            </span>
           </label>
           <label className="text-sm text-[#1b1c1f]">
             メールアドレス
@@ -103,6 +119,9 @@ export default function SignupPage() {
                 setForm((prev) => ({ ...prev, password: event.target.value }))
               }
             />
+            <span className="mt-1 block text-xs text-[#5c5d63]">
+              8文字以上
+            </span>
           </label>
           {error ? <p className="text-xs text-red-600">{error}</p> : null}
           <button

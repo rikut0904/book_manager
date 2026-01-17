@@ -42,6 +42,21 @@ func (s *Service) Get(userID string) (domain.User, bool) {
 	return s.users.FindByID(userID)
 }
 
+func (s *Service) Ensure(userID, email, username string) (domain.User, error) {
+	if user, ok := s.users.FindByID(userID); ok {
+		return user, nil
+	}
+	user := domain.User{
+		ID:       userID,
+		Email:    email,
+		Username: username,
+	}
+	if err := s.users.Create(user); err != nil {
+		return domain.User{}, err
+	}
+	return user, nil
+}
+
 func (s *Service) UpdateUsername(userID, username string) (domain.User, bool) {
 	user, ok := s.users.FindByID(userID)
 	if !ok {

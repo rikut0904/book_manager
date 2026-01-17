@@ -41,7 +41,7 @@ type Handler struct {
 	openAIAPIKey       string
 	openAIDefaultModel string
 	aiPrompt           string
-	adminUserIDs       map[string]struct{}
+	adminUsernames     map[string]struct{}
 }
 
 func New(
@@ -60,14 +60,14 @@ func New(
 	openAIAPIKey string,
 	openAIDefaultModel string,
 	aiPrompt string,
-	adminUserIDs []string,
+	adminUsernames []string,
 ) *Handler {
-	adminMap := make(map[string]struct{}, len(adminUserIDs))
-	for _, id := range adminUserIDs {
-		if strings.TrimSpace(id) == "" {
+	adminMap := make(map[string]struct{}, len(adminUsernames))
+	for _, username := range adminUsernames {
+		if strings.TrimSpace(username) == "" {
 			continue
 		}
-		adminMap[id] = struct{}{}
+		adminMap[username] = struct{}{}
 	}
 	return &Handler{
 		auth:               authService,
@@ -85,7 +85,7 @@ func New(
 		openAIAPIKey:       openAIAPIKey,
 		openAIDefaultModel: openAIDefaultModel,
 		aiPrompt:           aiPrompt,
-		adminUserIDs:       adminMap,
+		adminUsernames:     adminMap,
 	}
 }
 
@@ -109,26 +109,47 @@ func (h *Handler) AuthSignup(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "invalid json")
 		return
 	}
-	if req.Email == "" || req.Password == "" || req.Username == "" {
-		badRequest(w, "email, password, username are required")
+	if req.Email == "" {
+		badRequest(w, "email_required")
+		return
+	}
+	if req.Password == "" {
+		badRequest(w, "password_required")
+		return
+	}
+	if req.Username == "" {
+		badRequest(w, "username_required")
 		return
 	}
 	if !isValidEmail(req.Email) {
-		badRequest(w, "email is invalid")
+		badRequest(w, "invalid_email")
 		return
 	}
 	if len(req.Password) < 8 {
-		badRequest(w, "password must be at least 8 characters")
+		badRequest(w, "password_too_short")
 		return
 	}
-	if strings.TrimSpace(req.Username) == "" {
-		badRequest(w, "username is required")
+	username := strings.TrimSpace(req.Username)
+	if username == "" {
+		badRequest(w, "username_required")
 		return
 	}
-	result, err := h.auth.Signup(req.Email, req.Password, req.Username)
+	if len(username) < 2 {
+		badRequest(w, "username_too_short")
+		return
+	}
+	if len(username) > 20 {
+		badRequest(w, "username_too_long")
+		return
+	}
+	result, err := h.auth.Signup(req.Email, req.Password, username)
 	if err != nil {
 		if errors.Is(err, auth.ErrUserExists) {
-			conflict(w, "user already exists")
+			conflict(w, "email_exists")
+			return
+		}
+		if errors.Is(err, auth.ErrUsernameExists) {
+			conflict(w, "username_exists")
 			return
 		}
 		internalError(w)
@@ -613,7 +634,7 @@ func (h *Handler) UserBooks(w http.ResponseWriter, r *http.Request) {
 		}
 		userID := strings.TrimSpace(req.UserID)
 		if userID == "" {
-			userID = "user_demo"
+			userID = userIDFromRequest(r)
 		}
 		if req.AcquiredAt != "" && !isISODate(req.AcquiredAt) {
 			badRequest(w, "acquiredAt must be YYYY-MM-DD")
@@ -1196,8 +1217,12 @@ func (h *Handler) isAdminUser(userID string) bool {
 	if userID == "" {
 		return false
 	}
-	_, ok := h.adminUserIDs[userID]
-	return ok
+	user, ok := h.users.Get(userID)
+	if !ok {
+		return false
+	}
+	_, isAdmin := h.adminUsernames[user.Username]
+	return isAdmin
 }
 
 func (h *Handler) Follows(w http.ResponseWriter, r *http.Request) {
@@ -1532,6 +1557,24 @@ func isValidEmail(value string) bool {
 		return false
 	}
 	return strings.Contains(parts[1], ".")
+}
+
+func containsSymbol(value string) bool {
+	for _, r := range value {
+		if (r >= '!' && r <= '/') || (r >= ':' && r <= '@') || (r >= '[' && r <= '`') || (r >= '{' && r <= '~') {
+			return true
+		}
+	}
+	return false
+}
+
+func containsDigit(value string) bool {
+	for _, r := range value {
+		if r >= '0' && r <= '9' {
+			return true
+		}
+	}
+	return false
 }
 
 func containsAuthor(authors []string, query string) bool {
