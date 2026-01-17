@@ -116,7 +116,7 @@ func main() {
 	})
 	seriesService := series.NewService(seriesRepo)
 	openAIKeyService := openaikeys.NewService(openAIKeyRepo)
-	_ = authService.SeedUser("user_demo", "demo@book.local", "demo", "password")
+	_ = authService.SeedUser("user_demo", "demo@book.local", "demo", "デモユーザー", "password")
 	if count := normalizeBooks(bookService); count > 0 {
 		log.Printf("normalized %d book titles", count)
 	}
@@ -139,7 +139,7 @@ func main() {
 		cfg.OpenAIAPIKey,
 		cfg.OpenAIDefaultModel,
 		aiPrompt,
-		parseAdminUsernames(cfg.AdminUsernames),
+		parseAdminUserIDs(cfg.AdminUserIDs),
 	)
 	r := router.New(h, auditLogRepo, cfg.CORSAllowedOrigins)
 
@@ -180,20 +180,20 @@ func loadPrompt(path string) string {
 	return string(data)
 }
 
-func parseAdminUsernames(value string) []string {
+func parseAdminUserIDs(value string) []string {
 	if strings.TrimSpace(value) == "" {
 		return nil
 	}
 	parts := strings.Split(value, ",")
-	usernames := make([]string, 0, len(parts))
+	userIDs := make([]string, 0, len(parts))
 	for _, part := range parts {
-		username := strings.TrimSpace(part)
-		if username == "" {
+		userID := strings.TrimSpace(part)
+		if userID == "" {
 			continue
 		}
-		usernames = append(usernames, username)
+		userIDs = append(userIDs, userID)
 	}
-	return usernames
+	return userIDs
 }
 
 func normalizeBooks(bookService *books.Service) int {

@@ -41,7 +41,7 @@ type Handler struct {
 	openAIAPIKey       string
 	openAIDefaultModel string
 	aiPrompt           string
-	adminUsernames     map[string]struct{}
+	adminUserIDs       map[string]struct{}
 }
 
 func New(
@@ -60,14 +60,14 @@ func New(
 	openAIAPIKey string,
 	openAIDefaultModel string,
 	aiPrompt string,
-	adminUsernames []string,
+	adminUserIDs []string,
 ) *Handler {
-	adminMap := make(map[string]struct{}, len(adminUsernames))
-	for _, username := range adminUsernames {
-		if strings.TrimSpace(username) == "" {
+	adminMap := make(map[string]struct{}, len(adminUserIDs))
+	for _, userID := range adminUserIDs {
+		if strings.TrimSpace(userID) == "" {
 			continue
 		}
-		adminMap[username] = struct{}{}
+		adminMap[userID] = struct{}{}
 	}
 	return &Handler{
 		auth:               authService,
@@ -85,7 +85,7 @@ func New(
 		openAIAPIKey:       openAIAPIKey,
 		openAIDefaultModel: openAIDefaultModel,
 		aiPrompt:           aiPrompt,
-		adminUsernames:     adminMap,
+		adminUserIDs:       adminMap,
 	}
 }
 
@@ -101,9 +101,10 @@ func (h *Handler) AuthSignup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
-		Username string `json:"username"`
+		Email       string `json:"email"`
+		Password    string `json:"password"`
+		UserID      string `json:"userId"`
+		DisplayName string `json:"displayName"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		badRequest(w, "invalid json")
@@ -117,8 +118,8 @@ func (h *Handler) AuthSignup(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "password_required")
 		return
 	}
-	if req.Username == "" {
-		badRequest(w, "username_required")
+	if req.UserID == "" {
+		badRequest(w, "user_id_required")
 		return
 	}
 	if !isValidEmail(req.Email) {
@@ -129,27 +130,35 @@ func (h *Handler) AuthSignup(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "password_too_short")
 		return
 	}
-	username := strings.TrimSpace(req.Username)
-	if username == "" {
-		badRequest(w, "username_required")
+	normalizedUserID := strings.TrimSpace(req.UserID)
+	if normalizedUserID == "" {
+		badRequest(w, "user_id_required")
 		return
 	}
-	if len(username) < 2 {
-		badRequest(w, "username_too_short")
+	if len(normalizedUserID) < 2 {
+		badRequest(w, "user_id_too_short")
 		return
 	}
-	if len(username) > 20 {
-		badRequest(w, "username_too_long")
+	if len(normalizedUserID) > 20 {
+		badRequest(w, "user_id_too_long")
 		return
 	}
-	result, err := h.auth.Signup(req.Email, req.Password, username)
+	displayName := strings.TrimSpace(req.DisplayName)
+	if displayName == "" {
+		displayName = normalizedUserID // 表示名が未指定の場合はユーザーIDと同じにする
+	}
+	if len(displayName) > 50 {
+		badRequest(w, "display_name_too_long")
+		return
+	}
+	result, err := h.auth.Signup(req.Email, req.Password, normalizedUserID, displayName)
 	if err != nil {
 		if errors.Is(err, auth.ErrUserExists) {
 			conflict(w, "email_exists")
 			return
 		}
-		if errors.Is(err, auth.ErrUsernameExists) {
-			conflict(w, "username_exists")
+		if errors.Is(err, auth.ErrUserIDExists) {
+			conflict(w, "user_id_exists")
 			return
 		}
 		internalError(w)
@@ -159,9 +168,10 @@ func (h *Handler) AuthSignup(w http.ResponseWriter, r *http.Request) {
 		"accessToken":  result.AccessToken,
 		"refreshToken": result.RefreshToken,
 		"user": map[string]string{
-			"id":       result.User.ID,
-			"email":    result.User.Email,
-			"username": result.User.Username,
+			"id":          result.User.ID,
+			"email":       result.User.Email,
+			"userId":      result.User.UserID,
+			"displayName": result.User.DisplayName,
 		},
 	})
 }
@@ -200,9 +210,10 @@ func (h *Handler) AuthLogin(w http.ResponseWriter, r *http.Request) {
 		"accessToken":  result.AccessToken,
 		"refreshToken": result.RefreshToken,
 		"user": map[string]string{
-			"id":       result.User.ID,
-			"email":    result.User.Email,
-			"username": result.User.Username,
+			"id":          result.User.ID,
+			"email":       result.User.Email,
+			"userId":      result.User.UserID,
+			"displayName": result.User.DisplayName,
 		},
 	})
 }
@@ -1074,7 +1085,7 @@ func (h *Handler) Users(w http.ResponseWriter, r *http.Request) {
 		result = append(result, map[string]string{
 			"id":       user.ID,
 			"email":    user.Email,
-			"username": user.Username,
+			"userId":   user.UserID,
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -1102,9 +1113,10 @@ func (h *Handler) UsersByID(w http.ResponseWriter, r *http.Request) {
 	seriesCount := len(h.series.List())
 	writeJSON(w, http.StatusOK, map[string]any{
 		"user": map[string]string{
-			"id":       user.ID,
-			"email":    user.Email,
-			"username": user.Username,
+			"id":          user.ID,
+			"email":       user.Email,
+			"userId":      user.UserID,
+			"displayName": user.DisplayName,
 		},
 		"isAdmin": h.isAdminUser(user.ID),
 		"settings": map[string]any{
@@ -1127,27 +1139,27 @@ func (h *Handler) UsersMe(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPatch:
 		var req struct {
-			Username string `json:"username"`
+			UserID string `json:"userId"`
 		}
 		if err := decodeJSON(r, &req); err != nil {
 			badRequest(w, "invalid json")
 			return
 		}
-		if strings.TrimSpace(req.Username) == "" {
-			badRequest(w, "username is required")
+		if strings.TrimSpace(req.UserID) == "" {
+			badRequest(w, "user_id_required")
 			return
 		}
 		userID := userIDFromRequest(r)
-		user, ok := h.users.UpdateUsername(userID, req.Username)
+		user, ok := h.users.UpdateUserID(userID, req.UserID)
 		if !ok {
 			notFound(w)
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
 			"user": map[string]string{
-				"id":       user.ID,
-				"email":    user.Email,
-				"username": user.Username,
+				"id":     user.ID,
+				"email":  user.Email,
+				"userId": user.UserID,
 			},
 		})
 	case http.MethodDelete:
@@ -1221,7 +1233,7 @@ func (h *Handler) isAdminUser(userID string) bool {
 	if !ok {
 		return false
 	}
-	_, isAdmin := h.adminUsernames[user.Username]
+	_, isAdmin := h.adminUserIDs[user.UserID]
 	return isAdmin
 }
 

@@ -9,7 +9,8 @@ import (
 type User struct {
 	ID           string `gorm:"primaryKey"`
 	Email        string `gorm:"uniqueIndex"`
-	Username     string `gorm:"uniqueIndex"`
+	UserID       string `gorm:"column:user_id;uniqueIndex"`
+	DisplayName  string
 	PasswordHash string
 }
 

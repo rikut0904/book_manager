@@ -21,7 +21,7 @@ type Config struct {
 	CORSAllowedOrigins  string
 	OpenAIAPIKey        string
 	OpenAIDefaultModel  string
-	AdminUsernames      string
+	AdminUserIDs        string
 }
 
 func Load() Config {
@@ -41,7 +41,7 @@ func Load() Config {
 		CORSAllowedOrigins:  getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3000"),
 		OpenAIAPIKey:        getEnv("OPENAI_API_KEY", ""),
 		OpenAIDefaultModel:  getEnv("OPENAI_DEFAULT_MODEL", "gpt-4o-mini"),
-		AdminUsernames:      getEnv("ADMIN_USERNAMES", ""),
+		AdminUserIDs:        getEnv("ADMIN_USER_IDS", ""),
 	}
 }
 

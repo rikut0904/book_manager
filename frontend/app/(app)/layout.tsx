@@ -24,41 +24,44 @@ export default function AppLayout({
 }) {
   const [isReady, setIsReady] = useState(false);
   const [isAuthed, setIsAuthed] = useState(false);
+  const [accountId, setAccountId] = useState("");
   const [userId, setUserId] = useState("");
-  const [username, setUsername] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const router = useRouter();
 
   useEffect(() => {
     const auth = getAuthState();
     setIsAuthed(Boolean(auth?.accessToken));
-    setUserId(auth?.userId ?? "");
+    setAccountId(auth?.userId ?? "");
     setIsReady(true);
   }, []);
 
   useEffect(() => {
-    if (!userId) {
+    if (!accountId) {
       return;
     }
     let isMounted = true;
-    fetchJSON<{ user: { username: string } }>(`/users/${userId}`, {
+    fetchJSON<{ user: { userId: string; displayName: string } }>(`/users/${accountId}`, {
       auth: true,
     })
       .then((data) => {
         if (!isMounted) {
           return;
         }
-        setUsername(data.user?.username ?? "");
+        setUserId(data.user?.userId ?? "");
+        setDisplayName(data.user?.displayName ?? "");
       })
       .catch(() => {
         if (!isMounted) {
           return;
         }
-        setUsername("");
+        setUserId("");
+        setDisplayName("");
       });
     return () => {
       isMounted = false;
     };
-  }, [userId]);
+  }, [accountId]);
 
   const handleLogout = async () => {
     const auth = getAuthState();
@@ -155,11 +158,16 @@ export default function AppLayout({
               同期済み
             </div>
             <div className="flex items-center gap-2 text-sm">
-              <span className="text-[#5c5d63]">
-                {username ? `@${username}` : userId ? `@${userId}` : "user"}
-              </span>
+              <div className="text-right">
+                <span className="block text-[#1b1c1f]">
+                  {displayName || userId || "user"}
+                </span>
+                <span className="block text-xs text-[#5c5d63]">
+                  @{userId || accountId || "user"}
+                </span>
+              </div>
               <div className="h-9 w-9 rounded-full bg-[#1b1c1f] text-center text-sm leading-9 text-white">
-                R
+                {(displayName || userId || "U").charAt(0).toUpperCase()}
               </div>
             </div>
             <button

@@ -8,7 +8,7 @@ import { fetchJSON } from "@/lib/api";
 type UserItem = {
   id: string;
   email: string;
-  username: string;
+  userId: string;
 };
 
 export default function UsersPage() {
@@ -48,7 +48,7 @@ export default function UsersPage() {
           キーワードでユーザーを検索し、プロフィールを閲覧できます。
         </p>
         <div className="mt-4 flex flex-wrap gap-3">
-          <input className="flex-1 rounded-2xl border border-[#e4d8c7] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c86b3c]" placeholder="ユーザー名で検索" />
+          <input className="flex-1 rounded-2xl border border-[#e4d8c7] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c86b3c]" placeholder="ユーザーIDで検索" />
           <button className="rounded-full bg-[#1b1c1f] px-5 py-3 text-sm font-medium text-white">
             検索
           </button>
@@ -72,9 +72,9 @@ export default function UsersPage() {
             className="rounded-3xl border border-[#e4d8c7] bg-white/70 p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
             href={`/users/${user.id}`}
           >
-            <p className="text-xs text-[#c86b3c]">@{user.username}</p>
+            <p className="text-xs text-[#c86b3c]">@{user.userId}</p>
             <p className="mt-2 font-[var(--font-display)] text-xl">
-              {user.username}
+              {user.userId}
             </p>
             <p className="mt-2 text-sm text-[#5c5d63]">{user.email}</p>
           </Link>

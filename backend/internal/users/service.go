@@ -30,7 +30,7 @@ func (s *Service) List(query string) []domain.User {
 	normalized := strings.ToLower(strings.TrimSpace(query))
 	result := make([]domain.User, 0, len(items))
 	for _, user := range items {
-		if strings.Contains(strings.ToLower(user.Username), normalized) ||
+		if strings.Contains(strings.ToLower(user.UserID), normalized) ||
 			strings.Contains(strings.ToLower(user.Email), normalized) {
 			result = append(result, user)
 		}
@@ -42,14 +42,14 @@ func (s *Service) Get(userID string) (domain.User, bool) {
 	return s.users.FindByID(userID)
 }
 
-func (s *Service) Ensure(userID, email, username string) (domain.User, error) {
-	if user, ok := s.users.FindByID(userID); ok {
+func (s *Service) Ensure(id, email, userID string) (domain.User, error) {
+	if user, ok := s.users.FindByID(id); ok {
 		return user, nil
 	}
 	user := domain.User{
-		ID:       userID,
-		Email:    email,
-		Username: username,
+		ID:     id,
+		Email:  email,
+		UserID: userID,
 	}
 	if err := s.users.Create(user); err != nil {
 		return domain.User{}, err
@@ -57,12 +57,12 @@ func (s *Service) Ensure(userID, email, username string) (domain.User, error) {
 	return user, nil
 }
 
-func (s *Service) UpdateUsername(userID, username string) (domain.User, bool) {
-	user, ok := s.users.FindByID(userID)
+func (s *Service) UpdateUserID(id, userID string) (domain.User, bool) {
+	user, ok := s.users.FindByID(id)
 	if !ok {
 		return domain.User{}, false
 	}
-	user.Username = username
+	user.UserID = userID
 	if !s.users.Update(user) {
 		return domain.User{}, false
 	}

@@ -12,17 +12,19 @@ const errorMessages: Record<string, string> = {
   password_required: "パスワードを入力してください。",
   invalid_email: "メールアドレスの形式が正しくありません。",
   password_too_short: "パスワードは8文字以上で入力してください。",
-  username_required: "表示名を入力してください。",
-  username_too_short: "表示名は2文字以上で入力してください。",
-  username_too_long: "表示名は20文字以内で入力してください。",
+  user_id_required: "ユーザーIDを入力してください。",
+  user_id_too_short: "ユーザーIDは2文字以上で入力してください。",
+  user_id_too_long: "ユーザーIDは20文字以内で入力してください。",
+  display_name_too_long: "表示名は50文字以内で入力してください。",
   email_exists: "このメールアドレスは既に登録されています。",
-  username_exists: "この表示名は既に使用されています。",
+  user_id_exists: "このユーザーIDは既に使用されています。",
 };
 
 export default function SignupPage() {
   const router = useRouter();
   const [form, setForm] = useState({
-    username: "",
+    userId: "",
+    displayName: "",
     email: "",
     password: "",
   });
@@ -73,25 +75,41 @@ export default function SignupPage() {
           </div>
           <div className="rounded-2xl border border-[#e4d8c7] bg-[#f6f1e7] p-4 text-xs text-[#5c5d63]">
             <p className="font-medium text-[#1b1c1f]">無料ではじめる</p>
-            <p className="mt-2">メールアドレスと表示名だけで開始できます。</p>
+            <p className="mt-2">メールアドレスとユーザーIDだけで開始できます。</p>
           </div>
         </div>
 
         <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
           <label className="text-sm text-[#1b1c1f]">
-            表示名
+            ユーザーID
             <input
               className="mt-2 w-full rounded-2xl border border-[#e4d8c7] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c86b3c]"
-              name="username"
-              placeholder="rikut"
+              name="userId"
+              placeholder="rikut0904"
               type="text"
-              value={form.username}
+              value={form.userId}
               onChange={(event) =>
-                setForm((prev) => ({ ...prev, username: event.target.value }))
+                setForm((prev) => ({ ...prev, userId: event.target.value }))
               }
             />
             <span className="mt-1 block text-xs text-[#5c5d63]">
-              2〜20文字
+              2〜20文字、ログインや識別に使用（変更不可）
+            </span>
+          </label>
+          <label className="text-sm text-[#1b1c1f]">
+            表示名
+            <input
+              className="mt-2 w-full rounded-2xl border border-[#e4d8c7] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c86b3c]"
+              name="displayName"
+              placeholder="りくと"
+              type="text"
+              value={form.displayName}
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, displayName: event.target.value }))
+              }
+            />
+            <span className="mt-1 block text-xs text-[#5c5d63]">
+              プロフィールに表示される名前（後から変更可能、省略時はユーザーIDと同じ）
             </span>
           </label>
           <label className="text-sm text-[#1b1c1f]">

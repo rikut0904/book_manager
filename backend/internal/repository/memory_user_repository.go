@@ -10,18 +10,18 @@ import (
 var ErrUserExists = errors.New("user already exists")
 
 type MemoryUserRepository struct {
-	mu         sync.RWMutex
-	byID       map[string]domain.User
-	byEmail    map[string]domain.User
-	byUsername map[string]domain.User
-	ordered    []string
+	mu       sync.RWMutex
+	byID     map[string]domain.User
+	byEmail  map[string]domain.User
+	byUserID map[string]domain.User
+	ordered  []string
 }
 
 func NewMemoryUserRepository() *MemoryUserRepository {
 	return &MemoryUserRepository{
-		byID:       make(map[string]domain.User),
-		byEmail:    make(map[string]domain.User),
-		byUsername: make(map[string]domain.User),
+		byID:     make(map[string]domain.User),
+		byEmail:  make(map[string]domain.User),
+		byUserID: make(map[string]domain.User),
 	}
 }
 
@@ -35,12 +35,12 @@ func (r *MemoryUserRepository) Create(user domain.User) error {
 	if _, ok := r.byEmail[user.Email]; ok {
 		return ErrUserExists
 	}
-	if _, ok := r.byUsername[user.Username]; ok {
+	if _, ok := r.byUserID[user.UserID]; ok {
 		return ErrUserExists
 	}
 	r.byID[user.ID] = user
 	r.byEmail[user.Email] = user
-	r.byUsername[user.Username] = user
+	r.byUserID[user.UserID] = user
 	r.ordered = append(r.ordered, user.ID)
 	return nil
 }
@@ -53,11 +53,11 @@ func (r *MemoryUserRepository) FindByEmail(email string) (domain.User, bool) {
 	return user, ok
 }
 
-func (r *MemoryUserRepository) FindByUsername(username string) (domain.User, bool) {
+func (r *MemoryUserRepository) FindByUserID(userID string) (domain.User, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	user, ok := r.byUsername[username]
+	user, ok := r.byUserID[userID]
 	return user, ok
 }
 
@@ -99,14 +99,14 @@ func (r *MemoryUserRepository) Update(user domain.User) bool {
 	} else {
 		r.byEmail[user.Email] = user
 	}
-	if existing.Username != user.Username {
-		if _, ok := r.byUsername[user.Username]; ok {
+	if existing.UserID != user.UserID {
+		if _, ok := r.byUserID[user.UserID]; ok {
 			return false
 		}
-		delete(r.byUsername, existing.Username)
-		r.byUsername[user.Username] = user
+		delete(r.byUserID, existing.UserID)
+		r.byUserID[user.UserID] = user
 	} else {
-		r.byUsername[user.Username] = user
+		r.byUserID[user.UserID] = user
 	}
 	r.byID[user.ID] = user
 	return true
@@ -122,7 +122,7 @@ func (r *MemoryUserRepository) Delete(id string) bool {
 	}
 	delete(r.byID, id)
 	delete(r.byEmail, user.Email)
-	delete(r.byUsername, user.Username)
+	delete(r.byUserID, user.UserID)
 	r.ordered = removeUserID(r.ordered, id)
 	return true
 }

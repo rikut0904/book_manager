@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { fetchJSON } from "@/lib/api";
 
 type UserDetail = {
-  user: { id: string; email: string; username: string };
+  user: { id: string; email: string; userId: string };
   settings: { visibility: string };
   stats: { ownedCount: number; seriesCount: number; followers: number; following: number };
   recommendations: string[];
@@ -47,7 +47,7 @@ export default function UserDetailPage() {
           Profile
         </p>
         <h1 className="mt-2 font-[var(--font-display)] text-3xl">
-          {detail?.user.username || "ユーザー"}
+          {detail?.user.userId || "ユーザー"}
         </h1>
         <p className="mt-2 text-sm text-[#5c5d63]">
           公開範囲: {detail?.settings.visibility || "public"}

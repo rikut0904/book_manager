@@ -8,7 +8,7 @@ req:
 {
   "email": "user@example.com",
   "password": "********",
-  "username": "rikut"
+  "userId": "rikut"
 }
 ```
 
@@ -17,7 +17,7 @@ res:
 {
   "accessToken": "...",
   "refreshToken": "...",
-  "user": {"id": "...", "email": "...", "username": "rikut"}
+  "user": {"id": "...", "email": "...", "userId": "rikut"}
 }
 ```
 
@@ -126,7 +126,7 @@ GET /users/{id}
 res:
 ```
 {
-  "user": {"id": "...", "username": "..."},
+  "user": {"id": "...", "userId": "..."},
   "stats": {"ownedCount": 10, "seriesCount": 3, "followers": 2, "following": 5},
   "recommendations": ["..."]
 }

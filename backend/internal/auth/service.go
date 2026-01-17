@@ -16,7 +16,7 @@ import (
 var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrUserExists         = errors.New("user already exists")
-	ErrUsernameExists     = errors.New("username already exists")
+	ErrUserIDExists       = errors.New("user id already exists")
 )
 
 type Service struct {
@@ -37,7 +37,7 @@ func NewService(users repository.UserRepository) *Service {
 	}
 }
 
-func (s *Service) SeedUser(id, email, username, password string) error {
+func (s *Service) SeedUser(id, email, userID, displayName, password string) error {
 	if _, ok := s.users.FindByID(id); ok {
 		return nil
 	}
@@ -51,7 +51,8 @@ func (s *Service) SeedUser(id, email, username, password string) error {
 	user := domain.User{
 		ID:           id,
 		Email:        email,
-		Username:     username,
+		UserID:       userID,
+		DisplayName:  displayName,
 		PasswordHash: hashed,
 	}
 	if err := s.users.Create(user); err != nil {
@@ -60,9 +61,9 @@ func (s *Service) SeedUser(id, email, username, password string) error {
 	return nil
 }
 
-func (s *Service) Signup(email, password, username string) (AuthResult, error) {
-	if _, ok := s.users.FindByUsername(username); ok {
-		return AuthResult{}, ErrUsernameExists
+func (s *Service) Signup(email, password, userID, displayName string) (AuthResult, error) {
+	if _, ok := s.users.FindByUserID(userID); ok {
+		return AuthResult{}, ErrUserIDExists
 	}
 	hashed, err := hashPassword(password)
 	if err != nil {
@@ -71,7 +72,8 @@ func (s *Service) Signup(email, password, username string) (AuthResult, error) {
 	user := domain.User{
 		ID:           newID(),
 		Email:        email,
-		Username:     username,
+		UserID:       userID,
+		DisplayName:  displayName,
 		PasswordHash: hashed,
 	}
 	if err := s.users.Create(user); err != nil {
