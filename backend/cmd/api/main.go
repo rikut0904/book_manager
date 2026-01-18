@@ -116,7 +116,6 @@ func main() {
 	})
 	seriesService := series.NewService(seriesRepo)
 	openAIKeyService := openaikeys.NewService(openAIKeyRepo)
-	_ = authService.SeedUser("user_demo", "demo@book.local", "demo", "デモユーザー", "password")
 	if count := normalizeBooks(bookService); count > 0 {
 		log.Printf("normalized %d book titles", count)
 	}

@@ -10,7 +10,6 @@ import (
 
 var ErrInvalidVisibility = errors.New("invalid visibility")
 var ErrUserNotFound = errors.New("user not found")
-var ErrUserIDExists = errors.New("user id already exists")
 var ErrEmailExists = errors.New("email already exists")
 var ErrUpdateFailed = errors.New("user update failed")
 
@@ -61,16 +60,10 @@ func (s *Service) Ensure(id, email, userID string) (domain.User, error) {
 	return user, nil
 }
 
-func (s *Service) UpdateProfile(id string, userID *string, displayName *string, email *string) (domain.User, error) {
+func (s *Service) UpdateProfile(id string, displayName *string, email *string) (domain.User, error) {
 	user, ok := s.users.FindByID(id)
 	if !ok {
 		return domain.User{}, ErrUserNotFound
-	}
-	if userID != nil && *userID != user.UserID {
-		if existing, ok := s.users.FindByUserID(*userID); ok && existing.ID != id {
-			return domain.User{}, ErrUserIDExists
-		}
-		user.UserID = *userID
 	}
 	if email != nil && *email != user.Email {
 		if existing, ok := s.users.FindByEmail(*email); ok && existing.ID != id {

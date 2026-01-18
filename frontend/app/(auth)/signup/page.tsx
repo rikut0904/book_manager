@@ -85,7 +85,7 @@ export default function SignupPage() {
             <input
               className="mt-2 w-full rounded-2xl border border-[#e4d8c7] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c86b3c]"
               name="userId"
-              placeholder="rikut0904"
+              placeholder="book"
               type="text"
               value={form.userId}
               onChange={(event) =>
@@ -93,7 +93,7 @@ export default function SignupPage() {
               }
             />
             <span className="mt-1 block text-xs text-[#5c5d63]">
-              2〜20文字、ログインや識別に使用（設定から変更可能）
+              2〜20文字、ログインや識別に使用されます。<br />※変更不可です。
             </span>
           </label>
           <label className="text-sm text-[#1b1c1f]">
@@ -101,7 +101,7 @@ export default function SignupPage() {
             <input
               className="mt-2 w-full rounded-2xl border border-[#e4d8c7] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c86b3c]"
               name="displayName"
-              placeholder="りくと"
+              placeholder="book-name"
               type="text"
               value={form.displayName}
               onChange={(event) =>
@@ -109,7 +109,7 @@ export default function SignupPage() {
               }
             />
             <span className="mt-1 block text-xs text-[#5c5d63]">
-              プロフィールに表示される名前（後から変更可能、省略時はユーザーIDと同じ）
+              プロフィールに表示される名前
             </span>
           </label>
           <label className="text-sm text-[#1b1c1f]">
@@ -150,7 +150,7 @@ export default function SignupPage() {
             {isSubmitting ? "作成中..." : "アカウント作成"}
           </button>
           <div className="flex items-center justify-between text-xs text-[#5c5d63]">
-            <span>登録すると利用規約に同意したことになります。</span>
+            <span>登録すると<Link href="/terms" className="hover:text-[#1b1c1f] underline">利用規約</Link>に同意したことになります。</span>
             <Link className="hover:text-[#1b1c1f]" href="/login">
               ログインへ
             </Link>

@@ -1139,7 +1139,6 @@ func (h *Handler) UsersMe(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPatch:
 		var req struct {
-			UserID      *string `json:"userId"`
 			DisplayName *string `json:"displayName"`
 			Email       *string `json:"email"`
 		}
@@ -1147,26 +1146,9 @@ func (h *Handler) UsersMe(w http.ResponseWriter, r *http.Request) {
 			badRequest(w, "invalid json")
 			return
 		}
-		if req.UserID == nil && req.DisplayName == nil && req.Email == nil {
+		if req.DisplayName == nil && req.Email == nil {
 			badRequest(w, "no_fields")
 			return
-		}
-		var userID *string
-		if req.UserID != nil {
-			value := strings.TrimSpace(*req.UserID)
-			if value == "" {
-				badRequest(w, "user_id_required")
-				return
-			}
-			if len(value) < 2 {
-				badRequest(w, "user_id_too_short")
-				return
-			}
-			if len(value) > 20 {
-				badRequest(w, "user_id_too_long")
-				return
-			}
-			userID = &value
 		}
 		var displayName *string
 		if req.DisplayName != nil {
@@ -1191,14 +1173,10 @@ func (h *Handler) UsersMe(w http.ResponseWriter, r *http.Request) {
 			email = &value
 		}
 		userIDFromToken := userIDFromRequest(r)
-		user, err := h.users.UpdateProfile(userIDFromToken, userID, displayName, email)
+		user, err := h.users.UpdateProfile(userIDFromToken, displayName, email)
 		if err != nil {
 			if errors.Is(err, users.ErrUserNotFound) {
 				notFound(w)
-				return
-			}
-			if errors.Is(err, users.ErrUserIDExists) {
-				conflict(w, "user_id_exists")
 				return
 			}
 			if errors.Is(err, users.ErrEmailExists) {

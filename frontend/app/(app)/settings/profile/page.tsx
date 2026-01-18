@@ -12,10 +12,6 @@ type ProfileResponse = {
 };
 
 const errorMessages: Record<string, string> = {
-  user_id_required: "ユーザーIDを入力してください。",
-  user_id_too_short: "ユーザーIDは2文字以上で入力してください。",
-  user_id_too_long: "ユーザーIDは20文字以内で入力してください。",
-  user_id_exists: "このユーザーIDは既に使用されています。",
   display_name_too_long: "表示名は50文字以内で入力してください。",
   email_required: "メールアドレスを入力してください。",
   invalid_email: "メールアドレスの形式が正しくありません。",
@@ -25,10 +21,10 @@ const errorMessages: Record<string, string> = {
 export default function ProfileSettingsPage() {
   const [visibility, setVisibility] = useState("public");
   const [profileForm, setProfileForm] = useState({
-    userId: "",
     displayName: "",
     email: "",
   });
+  const [userId, setUserId] = useState("");
   const [profileError, setProfileError] = useState<string | null>(null);
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
   const [settingError, setSettingError] = useState<string | null>(null);
@@ -43,8 +39,8 @@ export default function ProfileSettingsPage() {
         if (data.settings?.visibility) {
           setVisibility(data.settings.visibility);
         }
+        setUserId(data.user?.userId ?? "");
         setProfileForm({
-          userId: data.user?.userId ?? "",
           displayName: data.user?.displayName ?? "",
           email: data.user?.email ?? "",
         });
@@ -75,7 +71,6 @@ export default function ProfileSettingsPage() {
         method: "PATCH",
         auth: true,
         body: JSON.stringify({
-          userId: profileForm.userId,
           displayName: profileForm.displayName,
           email: profileForm.email,
         }),
@@ -110,17 +105,15 @@ export default function ProfileSettingsPage() {
             ユーザーID
             <input
               className="rounded-2xl border border-[#e4d8c7] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c86b3c]"
-              value={profileForm.userId}
-              onChange={(event) =>
-                setProfileForm((prev) => ({ ...prev, userId: event.target.value }))
-              }
+              value={userId}
+              disabled
             />
             <span className="text-xs text-[#5c5d63]">
-              2〜20文字、ログインや識別に使用（変更可能）
+              2〜20文字、ログインや識別に使用（変更不可）
             </span>
           </label>
           <label className="flex flex-col gap-2">
-            表示名
+            ユーザー名
             <input
               className="rounded-2xl border border-[#e4d8c7] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c86b3c]"
               value={profileForm.displayName}
