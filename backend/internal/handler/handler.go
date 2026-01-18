@@ -1139,27 +1139,81 @@ func (h *Handler) UsersMe(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPatch:
 		var req struct {
-			UserID string `json:"userId"`
+			UserID      *string `json:"userId"`
+			DisplayName *string `json:"displayName"`
+			Email       *string `json:"email"`
 		}
 		if err := decodeJSON(r, &req); err != nil {
 			badRequest(w, "invalid json")
 			return
 		}
-		if strings.TrimSpace(req.UserID) == "" {
-			badRequest(w, "user_id_required")
+		if req.UserID == nil && req.DisplayName == nil && req.Email == nil {
+			badRequest(w, "no_fields")
 			return
 		}
-		userID := userIDFromRequest(r)
-		user, ok := h.users.UpdateUserID(userID, req.UserID)
-		if !ok {
-			notFound(w)
+		var userID *string
+		if req.UserID != nil {
+			value := strings.TrimSpace(*req.UserID)
+			if value == "" {
+				badRequest(w, "user_id_required")
+				return
+			}
+			if len(value) < 2 {
+				badRequest(w, "user_id_too_short")
+				return
+			}
+			if len(value) > 20 {
+				badRequest(w, "user_id_too_long")
+				return
+			}
+			userID = &value
+		}
+		var displayName *string
+		if req.DisplayName != nil {
+			value := strings.TrimSpace(*req.DisplayName)
+			if len(value) > 50 {
+				badRequest(w, "display_name_too_long")
+				return
+			}
+			displayName = &value
+		}
+		var email *string
+		if req.Email != nil {
+			value := strings.TrimSpace(*req.Email)
+			if value == "" {
+				badRequest(w, "email_required")
+				return
+			}
+			if !isValidEmail(value) {
+				badRequest(w, "invalid_email")
+				return
+			}
+			email = &value
+		}
+		userIDFromToken := userIDFromRequest(r)
+		user, err := h.users.UpdateProfile(userIDFromToken, userID, displayName, email)
+		if err != nil {
+			if errors.Is(err, users.ErrUserNotFound) {
+				notFound(w)
+				return
+			}
+			if errors.Is(err, users.ErrUserIDExists) {
+				conflict(w, "user_id_exists")
+				return
+			}
+			if errors.Is(err, users.ErrEmailExists) {
+				conflict(w, "email_exists")
+				return
+			}
+			internalError(w)
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
 			"user": map[string]string{
-				"id":     user.ID,
-				"email":  user.Email,
-				"userId": user.UserID,
+				"id":          user.ID,
+				"email":       user.Email,
+				"userId":      user.UserID,
+				"displayName": user.DisplayName,
 			},
 		})
 	case http.MethodDelete:

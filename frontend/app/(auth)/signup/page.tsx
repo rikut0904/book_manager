@@ -93,7 +93,7 @@ export default function SignupPage() {
               }
             />
             <span className="mt-1 block text-xs text-[#5c5d63]">
-              2〜20文字、ログインや識別に使用（変更不可）
+              2〜20文字、ログインや識別に使用（設定から変更可能）
             </span>
           </label>
           <label className="text-sm text-[#1b1c1f]">
