@@ -1404,6 +1404,16 @@ func (h *Handler) AdminOpenAIKeys(w http.ResponseWriter, r *http.Request) {
 				"name":      item.Name,
 				"maskedKey": openaikeys.MaskKey(item.APIKey),
 				"createdAt": item.CreatedAt,
+				"source":    "stored",
+			})
+		}
+		if strings.TrimSpace(h.openAIAPIKey) != "" {
+			out = append(out, map[string]any{
+				"id":        "env:openai_api_key",
+				"name":      "環境変数",
+				"maskedKey": openaikeys.MaskKey(h.openAIAPIKey),
+				"createdAt": "",
+				"source":    "env",
 			})
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"items": out})
