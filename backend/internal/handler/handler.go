@@ -116,11 +116,6 @@ func (h *Handler) AuthSignup(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Password == "" {
 		badRequest(w, "password_required")
-		return
-	}
-	if req.UserID == "" {
-		badRequest(w, "user_id_required")
-		return
 	}
 	if !isValidEmail(req.Email) {
 		badRequest(w, "invalid_email")
@@ -1611,24 +1606,6 @@ func isValidEmail(value string) bool {
 		return false
 	}
 	return strings.Contains(parts[1], ".")
-}
-
-func containsSymbol(value string) bool {
-	for _, r := range value {
-		if (r >= '!' && r <= '/') || (r >= ':' && r <= '@') || (r >= '[' && r <= '`') || (r >= '{' && r <= '~') {
-			return true
-		}
-	}
-	return false
-}
-
-func containsDigit(value string) bool {
-	for _, r := range value {
-		if r >= '0' && r <= '9' {
-			return true
-		}
-	}
-	return false
 }
 
 func containsAuthor(authors []string, query string) bool {
