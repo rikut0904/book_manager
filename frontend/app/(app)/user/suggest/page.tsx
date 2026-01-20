@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { fetchJSON } from "@/lib/api";
@@ -17,12 +18,20 @@ type Book = {
   title: string;
 };
 
-export default function RecommendationsPage() {
+type UserBook = {
+  id: string;
+  bookId: string;
+  seriesId: string;
+  volumeNumber: number;
+};
+
+export default function SuggestPage() {
   const [items, setItems] = useState<Recommendation[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({ bookId: "", comment: "" });
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [books, setBooks] = useState<Book[]>([]);
+  const [userBooks, setUserBooks] = useState<UserBook[]>([]);
 
   const loadItems = () => {
     let isMounted = true;
@@ -37,7 +46,7 @@ export default function RecommendationsPage() {
         if (!isMounted) {
           return;
         }
-        setError("おすすめを取得できませんでした。");
+        setError("Suggestを取得できませんでした。");
       });
     return () => {
       isMounted = false;
@@ -69,6 +78,26 @@ export default function RecommendationsPage() {
     };
   }, []);
 
+  useEffect(() => {
+    let isMounted = true;
+    fetchJSON<{ items: UserBook[] }>("/user-books", { auth: true })
+      .then((data) => {
+        if (!isMounted) {
+          return;
+        }
+        setUserBooks(data.items ?? []);
+      })
+      .catch(() => {
+        if (!isMounted) {
+          return;
+        }
+        setUserBooks([]);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const handleCreate = async () => {
     setSubmitError(null);
     if (!form.bookId.trim()) {
@@ -91,7 +120,7 @@ export default function RecommendationsPage() {
       setForm({ bookId: "", comment: "" });
       loadItems();
     } catch {
-      setSubmitError("おすすめの投稿に失敗しました。");
+      setSubmitError("Suggestの投稿に失敗しました。");
     }
   };
 
@@ -104,17 +133,45 @@ export default function RecommendationsPage() {
     }
   };
 
+  const getBookTitle = (id: string) =>
+    books.find((item) => item.id === id)?.title || id;
+  const getVolumeLabel = (id: string) => {
+    const volume = userBooks.find((item) => item.bookId === id)?.volumeNumber;
+    if (!volume) {
+      return "";
+    }
+    return `Vol.${volume}`;
+  };
+  const getBookTitleWithVolume = (id: string) => {
+    const title = getBookTitle(id);
+    const volume = getVolumeLabel(id);
+    return volume ? `${title} ${volume}` : title;
+  };
+
   return (
     <div className="flex flex-col gap-6">
       <section className="rounded-3xl border border-[#e4d8c7] bg-white/80 p-6 shadow-sm">
-        <p className="text-xs uppercase tracking-[0.3em] text-[#c86b3c]">
-          Recommendations
+        <Link className="inline-flex items-center gap-2 text-xs text-[#5c5d63]" href="/user">
+          <svg
+            aria-hidden="true"
+            className="h-4 w-4"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M15 6l-6 6 6 6" />
+          </svg>
+          ユーザーに戻る
+        </Link>
+        <p className="mt-4 text-xs uppercase tracking-[0.3em] text-[#c86b3c]">
+          Suggest
         </p>
-        <h1 className="mt-2 font-[var(--font-display)] text-3xl">
-          おすすめ一覧
-        </h1>
+        <h1 className="mt-2 font-[var(--font-display)] text-3xl">Suggest</h1>
         <p className="mt-2 text-sm text-[#5c5d63]">
-          みんなのおすすめがタイムライン形式で表示されます。
+          みんなのSuggestがタイムライン形式で表示されます。
         </p>
       </section>
 
@@ -126,7 +183,7 @@ export default function RecommendationsPage() {
         ) : null}
         {!error && items.length === 0 ? (
           <div className="rounded-3xl border border-[#e4d8c7] bg-white/70 p-6 text-sm text-[#5c5d63]">
-            まだおすすめが投稿されていません。
+            まだSuggestが投稿されていません。
           </div>
         ) : null}
         {items.map((item) => (
@@ -136,7 +193,7 @@ export default function RecommendationsPage() {
           >
             <p className="text-xs text-[#c86b3c]">@{item.userId}</p>
             <p className="mt-2 font-[var(--font-display)] text-xl">
-              {item.bookId}
+              {getBookTitleWithVolume(item.bookId)}
             </p>
             <p className="mt-2 text-sm text-[#5c5d63]">{item.comment}</p>
             <button
@@ -151,7 +208,7 @@ export default function RecommendationsPage() {
       </section>
 
       <section className="rounded-3xl border border-[#e4d8c7] bg-white/70 p-6 shadow-sm">
-        <h2 className="font-[var(--font-display)] text-2xl">おすすめ投稿</h2>
+        <h2 className="font-[var(--font-display)] text-2xl">Suggest投稿</h2>
         <div className="mt-4 flex flex-col gap-3 text-sm">
           <select
             className="rounded-2xl border border-[#e4d8c7] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c86b3c]"

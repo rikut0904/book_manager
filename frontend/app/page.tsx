@@ -22,8 +22,8 @@ export default function Home() {
           <Link className="hover:text-[#1b1c1f]" href="/books/new">
             登録
           </Link>
-          <Link className="hover:text-[#1b1c1f]" href="/recommendations">
-            おすすめ
+          <Link className="hover:text-[#1b1c1f]" href="/user/suggest">
+            おすすめの投稿
           </Link>
         </nav>
         <div className="flex items-center gap-3">
@@ -84,7 +84,7 @@ export default function Home() {
               </p>
             </div>
             <div className="rounded-2xl border border-[#e4d8c7] bg-white/70 p-5 shadow-sm">
-              <p className="text-xs text-[#c86b3c]">お気に入り</p>
+              <p className="text-xs text-[#c86b3c]">ブックマーク</p>
               <p className="mt-2 text-sm text-[#5c5d63]">
                 単巻・シリーズを登録して、次に買う本へ繋げる。
               </p>
@@ -121,7 +121,7 @@ export default function Home() {
                 <p className="text-sm text-white/60">所蔵数</p>
                 <p className="mt-1 text-3xl font-semibold">128冊</p>
                 <p className="mt-2 text-xs text-white/60">
-                  シリーズ: 18 / お気に入り: 7
+                  シリーズ: 18 / ブックマーク: 7
                 </p>
               </div>
               <div className="rounded-2xl bg-white/10 p-4">
@@ -154,7 +154,7 @@ export default function Home() {
                 </span>
               </li>
               <li className="flex items-center justify-between">
-                お気に入りと次に買う本
+                ブックマークと次に買う本
                 <span className="text-xs text-[#c86b3c]">Next</span>
               </li>
               <li className="flex items-center justify-between">

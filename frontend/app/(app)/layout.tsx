@@ -8,13 +8,10 @@ import { fetchJSON } from "@/lib/api";
 import { clearAuthState, getAuthState } from "@/lib/auth";
 
 const navItems = [
-  { href: "/books", label: "所蔵一覧" },
-  { href: "/books/new", label: "書籍登録" },
-  { href: "/favorites", label: "お気に入り" },
+  { href: "/books", label: "ホーム" },
   { href: "/next-to-buy", label: "次に買う本" },
-  { href: "/recommendations", label: "おすすめ" },
   { href: "/users", label: "ユーザー検索" },
-  { href: "/settings", label: "設定" },
+  { href: "/user", label: "ユーザー" },
 ];
 
 export default function AppLayout({
@@ -114,7 +111,7 @@ export default function AppLayout({
             ログインが必要です
           </h1>
           <p className="text-sm text-[#5c5d63]">
-            所蔵管理やお気に入り機能を使うにはログインしてください。
+            所蔵管理やブックマーク機能を使うにはログインしてください。
           </p>
           <div className="flex gap-3">
             <Link

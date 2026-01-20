@@ -97,6 +97,34 @@ export default function BooksPage() {
     return map;
   }, [favorites]);
 
+  const volumesBySeriesId = useMemo(() => {
+    const map = new Map<string, number[]>();
+    userBooks.forEach((item) => {
+      if (!item.seriesId || !item.volumeNumber) {
+        return;
+      }
+      const list = map.get(item.seriesId) ?? [];
+      list.push(item.volumeNumber);
+      map.set(item.seriesId, list);
+    });
+    map.forEach((list, key) => {
+      const unique = Array.from(new Set(list)).sort((a, b) => a - b);
+      map.set(key, unique);
+    });
+    return map;
+  }, [userBooks]);
+
+  const getVolumeSummary = (seriesId: string) => {
+    const list = volumesBySeriesId.get(seriesId);
+    if (!list || list.length === 0) {
+      return "";
+    }
+    if (list.length === 1) {
+      return `Vol.${list[0]}`;
+    }
+    return `Vol.${list[0]}〜${list[list.length - 1]}`;
+  };
+
   const { seriesCards, singleBooks } = useMemo(() => {
     const booksById = new Map(items.map((book) => [book.id, book]));
     const seriesById = new Map(seriesList.map((series) => [series.id, series]));
@@ -164,7 +192,7 @@ export default function BooksPage() {
         setFavorites((prev) => [...prev, created]);
       }
     } catch {
-      setError("お気に入りの更新に失敗しました。");
+      setError("ブックマークの更新に失敗しました。");
     }
   };
 
@@ -177,13 +205,10 @@ export default function BooksPage() {
               Library
             </p>
             <h1 className="mt-2 font-[var(--font-display)] text-3xl">
-              所蔵一覧
+              ホーム
             </h1>
           </div>
           <div className="flex flex-wrap gap-3">
-            <button className="rounded-full border border-[#e4d8c7] px-4 py-2 text-xs text-[#5c5d63]">
-              シリーズ
-            </button>
             <Link
               className="rounded-full bg-[#1b1c1f] px-4 py-2 text-xs font-medium text-white"
               href="/books/new"
@@ -199,7 +224,7 @@ export default function BooksPage() {
           />
           <select className="rounded-2xl border border-[#e4d8c7] bg-white px-4 py-3 text-sm text-[#5c5d63]">
             <option>全て</option>
-            <option>お気に入り</option>
+            <option>ブックマーク</option>
             <option>最近追加</option>
           </select>
         </div>
@@ -221,6 +246,13 @@ export default function BooksPage() {
             まだ登録された書籍がありません。
           </div>
         ) : null}
+        {seriesCards.length > 0 ? (
+          <div className="lg:col-span-3">
+            <div className="rounded-2xl border border-[#e4d8c7] bg-white/80 px-4 py-3 text-sm text-[#5c5d63]">
+              シリーズ
+            </div>
+          </div>
+        ) : null}
         {seriesCards.map((series) => {
           const favorite = favoritesBySeriesId.get(series.seriesId);
           const authors = Array.from(
@@ -228,6 +260,7 @@ export default function BooksPage() {
               series.books.flatMap((book) => book.authors || []).filter(Boolean)
             )
           );
+          const volumeSummary = getVolumeSummary(series.seriesId);
           return (
             <Link
               key={series.seriesId}
@@ -238,7 +271,7 @@ export default function BooksPage() {
                 <span>シリーズ</span>
                 <button
                   aria-label={
-                    favorite ? "シリーズのお気に入り解除" : "シリーズをお気に入り登録"
+                    favorite ? "シリーズのブックマーク解除" : "シリーズをブックマーク"
                   }
                   className={`flex h-8 w-8 items-center justify-center rounded-full border text-sm transition ${
                     favorite
@@ -259,8 +292,15 @@ export default function BooksPage() {
               <p className="mt-2 text-sm text-[#5c5d63]">
                 {authors.length > 0 ? authors.join(" / ") : "著者未登録"}
               </p>
-              <div className="mt-4 rounded-2xl bg-[#f6f1e7] px-3 py-2 text-xs text-[#5c5d63]">
-                巻数合計: {series.books.length}
+              <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-[#5c5d63]">
+                <span className="rounded-2xl bg-[#f6f1e7] px-3 py-2">
+                  巻数合計: {series.books.length}
+                </span>
+                {volumeSummary ? (
+                  <span className="rounded-2xl bg-[#f6f1e7] px-3 py-2">
+                    {volumeSummary}
+                  </span>
+                ) : null}
               </div>
               <p className="mt-4 text-xs text-[#c86b3c]">
                 シリーズ詳細を見る →
@@ -268,6 +308,13 @@ export default function BooksPage() {
             </Link>
           );
         })}
+        {singleBooks.length > 0 ? (
+          <div className="lg:col-span-3">
+            <div className="rounded-2xl border border-[#e4d8c7] bg-white/80 px-4 py-3 text-sm text-[#5c5d63]">
+              単巻
+            </div>
+          </div>
+        ) : null}
         {singleBooks.map((book, index) => (
           <Link
             key={book.id || book.isbn13 || `book-${index}`}

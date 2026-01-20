@@ -160,7 +160,7 @@ export default function SeriesDetailPage() {
         setFavorites((prev) => [...prev, created]);
       }
     } catch {
-      setError("お気に入りの更新に失敗しました。");
+      setError("ブックマークの更新に失敗しました。");
     }
   };
 
@@ -189,7 +189,7 @@ export default function SeriesDetailPage() {
           <div className="flex flex-wrap gap-3">
             <button
               aria-label={
-                favorite ? "シリーズのお気に入り解除" : "シリーズをお気に入り登録"
+                favorite ? "シリーズのブックマーク解除" : "シリーズをブックマーク"
               }
               className={`flex h-9 w-9 items-center justify-center rounded-full border text-base transition ${
                 favorite
