@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { fetchJSON } from "@/lib/api";
 import { getAuthState } from "@/lib/auth";
+import { commonErrorMessages } from "@/lib/errorMessages";
 
 type UserResponse = {
   user: { id: string; email: string; userId: string; displayName: string };
@@ -42,12 +43,7 @@ type Recommendation = {
   createdAt: string;
 };
 
-const errorMessages: Record<string, string> = {
-  display_name_too_long: "ユーザー名は50文字以内で入力してください。",
-  email_required: "メールアドレスを入力してください。",
-  invalid_email: "メールアドレスの形式が正しくありません。",
-  email_exists: "このメールアドレスは既に登録されています。",
-};
+const errorMessages = commonErrorMessages;
 
 export default function UserPage() {
   const [profile, setProfile] = useState<UserResponse["user"] | null>(null);

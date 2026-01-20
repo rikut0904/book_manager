@@ -6,19 +6,7 @@ import { useState } from "react";
 
 import { fetchJSON } from "@/lib/api";
 import { setAuthState } from "@/lib/auth";
-
-const errorMessages: Record<string, string> = {
-  email_required: "メールアドレスを入力してください。",
-  password_required: "パスワードを入力してください。",
-  invalid_email: "メールアドレスの形式が正しくありません。",
-  password_too_short: "パスワードは8文字以上で入力してください。",
-  user_id_required: "ユーザーIDを入力してください。",
-  user_id_too_short: "ユーザーIDは2文字以上で入力してください。",
-  user_id_too_long: "ユーザーIDは20文字以内で入力してください。",
-  display_name_too_long: "表示名は50文字以内で入力してください。",
-  email_exists: "このメールアドレスは既に登録されています。",
-  user_id_exists: "このユーザーIDは既に使用されています。",
-};
+import { signupErrorMessages } from "@/lib/errorMessages";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -52,7 +40,7 @@ export default function SignupPage() {
       router.push("/books");
     } catch (err) {
       const message = err instanceof Error ? err.message.trim() : "";
-      setError(errorMessages[message] || "登録に失敗しました。");
+      setError(signupErrorMessages[message] || "登録に失敗しました。");
     } finally {
       setIsSubmitting(false);
     }
