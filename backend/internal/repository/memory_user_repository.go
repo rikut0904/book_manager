@@ -104,7 +104,6 @@ func (r *MemoryUserRepository) Update(user domain.User) bool {
 		return false
 	}
 	r.byUserID[user.UserID] = user
-	}
 	r.byID[user.ID] = user
 	return true
 }
