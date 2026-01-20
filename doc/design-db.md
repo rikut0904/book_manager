@@ -13,6 +13,7 @@
 - email (unique)
 - password_hash
 - user_id (unique)
+- display_name
 - status (active/deleted)
 - deleted_at
 - created_at, updated_at
