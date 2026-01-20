@@ -100,13 +100,10 @@ func (r *MemoryUserRepository) Update(user domain.User) bool {
 		r.byEmail[user.Email] = user
 	}
 	if existing.UserID != user.UserID {
-		if _, ok := r.byUserID[user.UserID]; ok {
-			return false
-		}
-		delete(r.byUserID, existing.UserID)
-		r.byUserID[user.UserID] = user
-	} else {
-		r.byUserID[user.UserID] = user
+		// UserID is immutable and should not be changed.
+		return false
+	}
+	r.byUserID[user.UserID] = user
 	}
 	r.byID[user.ID] = user
 	return true
