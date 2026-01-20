@@ -116,7 +116,6 @@ func main() {
 	})
 	seriesService := series.NewService(seriesRepo)
 	openAIKeyService := openaikeys.NewService(openAIKeyRepo)
-	_ = authService.SeedUser("user_demo", "demo@book.local", "demo", "password")
 	if count := normalizeBooks(bookService); count > 0 {
 		log.Printf("normalized %d book titles", count)
 	}
@@ -185,15 +184,15 @@ func parseAdminUserIDs(value string) []string {
 		return nil
 	}
 	parts := strings.Split(value, ",")
-	ids := make([]string, 0, len(parts))
+	userIDs := make([]string, 0, len(parts))
 	for _, part := range parts {
-		id := strings.TrimSpace(part)
-		if id == "" {
+		userID := strings.TrimSpace(part)
+		if userID == "" {
 			continue
 		}
-		ids = append(ids, id)
+		userIDs = append(userIDs, userID)
 	}
-	return ids
+	return userIDs
 }
 
 func normalizeBooks(bookService *books.Service) int {

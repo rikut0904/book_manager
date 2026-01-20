@@ -99,7 +99,7 @@ export default function NextToBuyPage() {
           次に買う本
         </h1>
         <p className="mt-2 text-sm text-[#5c5d63]">
-          お気に入りの次巻と手入力メモをまとめます。
+          ブックマークの次巻と手入力メモをまとめます。
         </p>
       </section>
 

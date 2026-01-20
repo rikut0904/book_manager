@@ -9,6 +9,9 @@ import (
 )
 
 var ErrInvalidVisibility = errors.New("invalid visibility")
+var ErrUserNotFound = errors.New("user not found")
+var ErrEmailExists = errors.New("email already exists")
+var ErrUpdateFailed = errors.New("user update failed")
 
 type Service struct {
 	users    repository.UserRepository
@@ -30,7 +33,7 @@ func (s *Service) List(query string) []domain.User {
 	normalized := strings.ToLower(strings.TrimSpace(query))
 	result := make([]domain.User, 0, len(items))
 	for _, user := range items {
-		if strings.Contains(strings.ToLower(user.Username), normalized) ||
+		if strings.Contains(strings.ToLower(user.UserID), normalized) ||
 			strings.Contains(strings.ToLower(user.Email), normalized) {
 			result = append(result, user)
 		}
@@ -42,16 +45,39 @@ func (s *Service) Get(userID string) (domain.User, bool) {
 	return s.users.FindByID(userID)
 }
 
-func (s *Service) UpdateUsername(userID, username string) (domain.User, bool) {
-	user, ok := s.users.FindByID(userID)
+func (s *Service) Ensure(id, email, userID string) (domain.User, error) {
+	if user, ok := s.users.FindByID(id); ok {
+		return user, nil
+	}
+	user := domain.User{
+		ID:     id,
+		Email:  email,
+		UserID: userID,
+	}
+	if err := s.users.Create(user); err != nil {
+		return domain.User{}, err
+	}
+	return user, nil
+}
+
+func (s *Service) UpdateProfile(id string, displayName *string, email *string) (domain.User, error) {
+	user, ok := s.users.FindByID(id)
 	if !ok {
-		return domain.User{}, false
+		return domain.User{}, ErrUserNotFound
 	}
-	user.Username = username
+	if email != nil && *email != user.Email {
+		if existing, ok := s.users.FindByEmail(*email); ok && existing.ID != id {
+			return domain.User{}, ErrEmailExists
+		}
+		user.Email = *email
+	}
+	if displayName != nil {
+		user.DisplayName = *displayName
+	}
 	if !s.users.Update(user) {
-		return domain.User{}, false
+		return domain.User{}, ErrUpdateFailed
 	}
-	return user, true
+	return user, nil
 }
 
 func (s *Service) Delete(userID string) bool {

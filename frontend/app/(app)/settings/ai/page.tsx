@@ -19,6 +19,7 @@ type OpenAIKeyItem = {
   name: string;
   maskedKey: string;
   createdAt: string;
+  source?: "stored" | "env";
 };
 
 type OpenAIModelResponse = {
@@ -235,13 +236,15 @@ export default function AISettingsPage() {
                 className="flex items-center gap-2 rounded-full border border-[#e4d8c7] bg-white px-3 py-2 text-[#5c5d63]"
               >
                 {item.name}: {item.maskedKey}
-                <button
-                  className="text-[10px] text-[#c86b3c] hover:text-[#8f3d1f]"
-                  type="button"
-                  onClick={() => handleDeleteKey(item.id)}
-                >
-                  削除
-                </button>
+                {item.source === "env" ? null : (
+                  <button
+                    className="text-[10px] text-[#c86b3c] hover:text-[#8f3d1f]"
+                    type="button"
+                    onClick={() => handleDeleteKey(item.id)}
+                  >
+                    削除
+                  </button>
+                )}
               </span>
             ))}
           </div>

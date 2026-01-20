@@ -18,7 +18,8 @@ func (r *UserRepository) Create(user domain.User) error {
 	model := User{
 		ID:           user.ID,
 		Email:        user.Email,
-		Username:     user.Username,
+		UserID:     user.UserID,
+		DisplayName:  user.DisplayName,
 		PasswordHash: user.PasswordHash,
 	}
 	if _, ok := r.FindByID(user.ID); ok {
@@ -41,7 +42,22 @@ func (r *UserRepository) FindByEmail(email string) (domain.User, bool) {
 	return domain.User{
 		ID:           model.ID,
 		Email:        model.Email,
-		Username:     model.Username,
+		UserID:     model.UserID,
+		DisplayName:  model.DisplayName,
+		PasswordHash: model.PasswordHash,
+	}, true
+}
+
+func (r *UserRepository) FindByUserID(userID string) (domain.User, bool) {
+	var model User
+	if err := r.db.Where("user_id = ?", userID).First(&model).Error; err != nil {
+		return domain.User{}, false
+	}
+	return domain.User{
+		ID:           model.ID,
+		Email:        model.Email,
+		UserID:     model.UserID,
+		DisplayName:  model.DisplayName,
 		PasswordHash: model.PasswordHash,
 	}, true
 }
@@ -54,7 +70,8 @@ func (r *UserRepository) FindByID(id string) (domain.User, bool) {
 	return domain.User{
 		ID:           model.ID,
 		Email:        model.Email,
-		Username:     model.Username,
+		UserID:     model.UserID,
+		DisplayName:  model.DisplayName,
 		PasswordHash: model.PasswordHash,
 	}, true
 }
@@ -69,7 +86,8 @@ func (r *UserRepository) List() []domain.User {
 		items = append(items, domain.User{
 			ID:           model.ID,
 			Email:        model.Email,
-			Username:     model.Username,
+			UserID:     model.UserID,
+			DisplayName:  model.DisplayName,
 			PasswordHash: model.PasswordHash,
 		})
 	}
@@ -80,7 +98,8 @@ func (r *UserRepository) Update(user domain.User) bool {
 	model := User{
 		ID:           user.ID,
 		Email:        user.Email,
-		Username:     user.Username,
+		UserID:     user.UserID,
+		DisplayName:  user.DisplayName,
 		PasswordHash: user.PasswordHash,
 	}
 	if err := r.db.Save(&model).Error; err != nil {

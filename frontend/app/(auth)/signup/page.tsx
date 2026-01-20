@@ -6,11 +6,13 @@ import { useState } from "react";
 
 import { fetchJSON } from "@/lib/api";
 import { setAuthState } from "@/lib/auth";
+import { signupErrorMessages } from "@/lib/errorMessages";
 
 export default function SignupPage() {
   const router = useRouter();
   const [form, setForm] = useState({
-    username: "",
+    userId: "",
+    displayName: "",
     email: "",
     password: "",
   });
@@ -36,8 +38,9 @@ export default function SignupPage() {
         userId: data.user.id,
       });
       router.push("/books");
-    } catch {
-      setError("登録に失敗しました。");
+    } catch (err) {
+      const message = err instanceof Error ? err.message.trim() : "";
+      setError(signupErrorMessages[message] || "登録に失敗しました。");
     } finally {
       setIsSubmitting(false);
     }
@@ -60,23 +63,42 @@ export default function SignupPage() {
           </div>
           <div className="rounded-2xl border border-[#e4d8c7] bg-[#f6f1e7] p-4 text-xs text-[#5c5d63]">
             <p className="font-medium text-[#1b1c1f]">無料ではじめる</p>
-            <p className="mt-2">メールアドレスと表示名だけで開始できます。</p>
+            <p className="mt-2">メールアドレスとユーザーIDだけで開始できます。</p>
           </div>
         </div>
 
         <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
           <label className="text-sm text-[#1b1c1f]">
+            ユーザーID
+            <input
+              className="mt-2 w-full rounded-2xl border border-[#e4d8c7] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c86b3c]"
+              name="userId"
+              placeholder="book"
+              type="text"
+              value={form.userId}
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, userId: event.target.value }))
+              }
+            />
+            <span className="mt-1 block text-xs text-[#5c5d63]">
+              2〜20文字、ログインや識別に使用されます。<br />※変更不可です。
+            </span>
+          </label>
+          <label className="text-sm text-[#1b1c1f]">
             表示名
             <input
               className="mt-2 w-full rounded-2xl border border-[#e4d8c7] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c86b3c]"
-              name="username"
-              placeholder="rikut"
+              name="displayName"
+              placeholder="book-name"
               type="text"
-              value={form.username}
+              value={form.displayName}
               onChange={(event) =>
-                setForm((prev) => ({ ...prev, username: event.target.value }))
+                setForm((prev) => ({ ...prev, displayName: event.target.value }))
               }
             />
+            <span className="mt-1 block text-xs text-[#5c5d63]">
+              プロフィールに表示される名前
+            </span>
           </label>
           <label className="text-sm text-[#1b1c1f]">
             メールアドレス
@@ -103,6 +125,9 @@ export default function SignupPage() {
                 setForm((prev) => ({ ...prev, password: event.target.value }))
               }
             />
+            <span className="mt-1 block text-xs text-[#5c5d63]">
+              8文字以上
+            </span>
           </label>
           {error ? <p className="text-xs text-red-600">{error}</p> : null}
           <button
@@ -113,7 +138,7 @@ export default function SignupPage() {
             {isSubmitting ? "作成中..." : "アカウント作成"}
           </button>
           <div className="flex items-center justify-between text-xs text-[#5c5d63]">
-            <span>登録すると利用規約に同意したことになります。</span>
+            <span>登録すると<Link href="/terms" className="hover:text-[#1b1c1f] underline">利用規約</Link>に同意したことになります。</span>
             <Link className="hover:text-[#1b1c1f]" href="/login">
               ログインへ
             </Link>

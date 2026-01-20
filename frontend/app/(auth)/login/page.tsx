@@ -54,10 +54,6 @@ export default function LoginPage() {
               ログインして所蔵の更新、シリーズの確認、次に買う本の管理を続けましょう。
             </p>
           </div>
-          <div className="rounded-2xl border border-[#e4d8c7] bg-[#f6f1e7] p-4 text-xs text-[#5c5d63]">
-            <p className="font-medium text-[#1b1c1f]">テスト用アカウント</p>
-            <p className="mt-2">email: demo@book.local / password: password</p>
-          </div>
         </div>
 
         <form className="flex flex-col gap-4" onSubmit={handleSubmit}>

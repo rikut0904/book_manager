@@ -27,8 +27,15 @@ export async function fetchJSON<T>(
   });
 
   if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || "Request failed");
+    const text = await response.text();
+    let message = "Request failed";
+    try {
+      const json = JSON.parse(text);
+      message = json.message || json.error || message;
+    } catch {
+      message = text || message;
+    }
+    throw new Error(message);
   }
 
   return (await response.json()) as T;

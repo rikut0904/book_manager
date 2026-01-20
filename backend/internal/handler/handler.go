@@ -63,11 +63,11 @@ func New(
 	adminUserIDs []string,
 ) *Handler {
 	adminMap := make(map[string]struct{}, len(adminUserIDs))
-	for _, id := range adminUserIDs {
-		if strings.TrimSpace(id) == "" {
+	for _, userID := range adminUserIDs {
+		if strings.TrimSpace(userID) == "" {
 			continue
 		}
-		adminMap[id] = struct{}{}
+		adminMap[userID] = struct{}{}
 	}
 	return &Handler{
 		auth:               authService,
@@ -101,34 +101,60 @@ func (h *Handler) AuthSignup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
-		Username string `json:"username"`
+		Email       string `json:"email"`
+		Password    string `json:"password"`
+		UserID      string `json:"userId"`
+		DisplayName string `json:"displayName"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		badRequest(w, "invalid json")
 		return
 	}
-	if req.Email == "" || req.Password == "" || req.Username == "" {
-		badRequest(w, "email, password, username are required")
+	if req.Email == "" {
+		badRequest(w, "email_required")
+		return
+	}
+	if req.Password == "" {
+		badRequest(w, "password_required")
 		return
 	}
 	if !isValidEmail(req.Email) {
-		badRequest(w, "email is invalid")
+		badRequest(w, "invalid_email")
 		return
 	}
 	if len(req.Password) < 8 {
-		badRequest(w, "password must be at least 8 characters")
+		badRequest(w, "password_too_short")
 		return
 	}
-	if strings.TrimSpace(req.Username) == "" {
-		badRequest(w, "username is required")
+	normalizedUserID := strings.TrimSpace(req.UserID)
+	if normalizedUserID == "" {
+		badRequest(w, "user_id_required")
 		return
 	}
-	result, err := h.auth.Signup(req.Email, req.Password, req.Username)
+	if len(normalizedUserID) < 2 {
+		badRequest(w, "user_id_too_short")
+		return
+	}
+	if len(normalizedUserID) > 20 {
+		badRequest(w, "user_id_too_long")
+		return
+	}
+	displayName := strings.TrimSpace(req.DisplayName)
+	if displayName == "" {
+		displayName = normalizedUserID // 表示名が未指定の場合はユーザーIDと同じにする
+	}
+	if len(displayName) > 50 {
+		badRequest(w, "display_name_too_long")
+		return
+	}
+	result, err := h.auth.Signup(req.Email, req.Password, normalizedUserID, displayName)
 	if err != nil {
 		if errors.Is(err, auth.ErrUserExists) {
-			conflict(w, "user already exists")
+			conflict(w, "email_exists")
+			return
+		}
+		if errors.Is(err, auth.ErrUserIDExists) {
+			conflict(w, "user_id_exists")
 			return
 		}
 		internalError(w)
@@ -138,9 +164,10 @@ func (h *Handler) AuthSignup(w http.ResponseWriter, r *http.Request) {
 		"accessToken":  result.AccessToken,
 		"refreshToken": result.RefreshToken,
 		"user": map[string]string{
-			"id":       result.User.ID,
-			"email":    result.User.Email,
-			"username": result.User.Username,
+			"id":          result.User.ID,
+			"email":       result.User.Email,
+			"userId":      result.User.UserID,
+			"displayName": result.User.DisplayName,
 		},
 	})
 }
@@ -179,9 +206,10 @@ func (h *Handler) AuthLogin(w http.ResponseWriter, r *http.Request) {
 		"accessToken":  result.AccessToken,
 		"refreshToken": result.RefreshToken,
 		"user": map[string]string{
-			"id":       result.User.ID,
-			"email":    result.User.Email,
-			"username": result.User.Username,
+			"id":          result.User.ID,
+			"email":       result.User.Email,
+			"userId":      result.User.UserID,
+			"displayName": result.User.DisplayName,
 		},
 	})
 }
@@ -613,7 +641,7 @@ func (h *Handler) UserBooks(w http.ResponseWriter, r *http.Request) {
 		}
 		userID := strings.TrimSpace(req.UserID)
 		if userID == "" {
-			userID = "user_demo"
+			userID = userIDFromRequest(r)
 		}
 		if req.AcquiredAt != "" && !isISODate(req.AcquiredAt) {
 			badRequest(w, "acquiredAt must be YYYY-MM-DD")
@@ -1053,7 +1081,7 @@ func (h *Handler) Users(w http.ResponseWriter, r *http.Request) {
 		result = append(result, map[string]string{
 			"id":       user.ID,
 			"email":    user.Email,
-			"username": user.Username,
+			"userId":   user.UserID,
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -1081,9 +1109,10 @@ func (h *Handler) UsersByID(w http.ResponseWriter, r *http.Request) {
 	seriesCount := len(h.series.List())
 	writeJSON(w, http.StatusOK, map[string]any{
 		"user": map[string]string{
-			"id":       user.ID,
-			"email":    user.Email,
-			"username": user.Username,
+			"id":          user.ID,
+			"email":       user.Email,
+			"userId":      user.UserID,
+			"displayName": user.DisplayName,
 		},
 		"isAdmin": h.isAdminUser(user.ID),
 		"settings": map[string]any{
@@ -1106,27 +1135,59 @@ func (h *Handler) UsersMe(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPatch:
 		var req struct {
-			Username string `json:"username"`
+			DisplayName *string `json:"displayName"`
+			Email       *string `json:"email"`
 		}
 		if err := decodeJSON(r, &req); err != nil {
 			badRequest(w, "invalid json")
 			return
 		}
-		if strings.TrimSpace(req.Username) == "" {
-			badRequest(w, "username is required")
+		if req.DisplayName == nil && req.Email == nil {
+			badRequest(w, "no_fields")
 			return
 		}
-		userID := userIDFromRequest(r)
-		user, ok := h.users.UpdateUsername(userID, req.Username)
-		if !ok {
-			notFound(w)
+		var displayName *string
+		if req.DisplayName != nil {
+			value := strings.TrimSpace(*req.DisplayName)
+			if len(value) > 50 {
+				badRequest(w, "display_name_too_long")
+				return
+			}
+			displayName = &value
+		}
+		var email *string
+		if req.Email != nil {
+			value := strings.TrimSpace(*req.Email)
+			if value == "" {
+				badRequest(w, "email_required")
+				return
+			}
+			if !isValidEmail(value) {
+				badRequest(w, "invalid_email")
+				return
+			}
+			email = &value
+		}
+		userIDFromToken := userIDFromRequest(r)
+		user, err := h.users.UpdateProfile(userIDFromToken, displayName, email)
+		if err != nil {
+			if errors.Is(err, users.ErrUserNotFound) {
+				notFound(w)
+				return
+			}
+			if errors.Is(err, users.ErrEmailExists) {
+				conflict(w, "email_exists")
+				return
+			}
+			internalError(w)
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
 			"user": map[string]string{
-				"id":       user.ID,
-				"email":    user.Email,
-				"username": user.Username,
+				"id":          user.ID,
+				"email":       user.Email,
+				"userId":      user.UserID,
+				"displayName": user.DisplayName,
 			},
 		})
 	case http.MethodDelete:
@@ -1196,8 +1257,12 @@ func (h *Handler) isAdminUser(userID string) bool {
 	if userID == "" {
 		return false
 	}
-	_, ok := h.adminUserIDs[userID]
-	return ok
+	user, ok := h.users.Get(userID)
+	if !ok {
+		return false
+	}
+	_, isAdmin := h.adminUserIDs[user.UserID]
+	return isAdmin
 }
 
 func (h *Handler) Follows(w http.ResponseWriter, r *http.Request) {
@@ -1335,6 +1400,16 @@ func (h *Handler) AdminOpenAIKeys(w http.ResponseWriter, r *http.Request) {
 				"name":      item.Name,
 				"maskedKey": openaikeys.MaskKey(item.APIKey),
 				"createdAt": item.CreatedAt,
+				"source":    "stored",
+			})
+		}
+		if strings.TrimSpace(h.openAIAPIKey) != "" {
+			out = append(out, map[string]any{
+				"id":        "env:openai_api_key",
+				"name":      "環境変数",
+				"maskedKey": openaikeys.MaskKey(h.openAIAPIKey),
+				"createdAt": "",
+				"source":    "env",
 			})
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"items": out})
