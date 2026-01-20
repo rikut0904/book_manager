@@ -116,6 +116,7 @@ func (h *Handler) AuthSignup(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Password == "" {
 		badRequest(w, "password_required")
+		return
 	}
 	if !isValidEmail(req.Email) {
 		badRequest(w, "invalid_email")
