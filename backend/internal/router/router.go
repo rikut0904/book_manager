@@ -11,6 +11,7 @@ func New(
 	h *handler.Handler,
 	auditRepo repository.AuditLogRepository,
 	allowedOrigins string,
+	authMiddleware func(http.Handler) http.Handler,
 ) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", h.Health)
@@ -19,6 +20,9 @@ func New(
 	mux.HandleFunc("/auth/login", h.AuthLogin)
 	mux.HandleFunc("/auth/refresh", h.AuthRefresh)
 	mux.HandleFunc("/auth/logout", h.AuthLogout)
+	mux.HandleFunc("/auth/resend-verify", h.AuthResendVerify)
+	mux.HandleFunc("/auth/email", h.AuthUpdateEmail)
+	mux.HandleFunc("/auth/status", h.AuthStatus)
 
 	mux.HandleFunc("/isbn/lookup", h.IsbnLookup)
 
@@ -57,5 +61,8 @@ func New(
 	mux.HandleFunc("/admin/openai-models", h.AdminOpenAIModels)
 
 	handlerWithAudit := AuditMiddleware(auditRepo, mux)
+	if authMiddleware != nil {
+		handlerWithAudit = authMiddleware(handlerWithAudit)
+	}
 	return CORSMiddleware(allowedOrigins, handlerWithAudit)
 }

@@ -16,8 +16,8 @@ export async function fetchJSON<T>(
 
   if (options.auth) {
     const auth = getAuthState();
-    if (auth?.userId) {
-      headers.set("X-User-Id", auth.userId);
+    if (auth?.accessToken) {
+      headers.set("Authorization", `Bearer ${auth.accessToken}`);
     }
   }
 

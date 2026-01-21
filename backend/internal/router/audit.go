@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"book_manager/backend/internal/authctx"
 	"book_manager/backend/internal/domain"
 	"book_manager/backend/internal/repository"
 )
@@ -75,6 +76,9 @@ func pathToEntity(path string) (string, string) {
 }
 
 func userIDFromRequest(r *http.Request) string {
+	if value := strings.TrimSpace(authctx.UserIDFromContext(r.Context())); value != "" {
+		return value
+	}
 	if value := strings.TrimSpace(r.Header.Get("X-User-Id")); value != "" {
 		return value
 	}

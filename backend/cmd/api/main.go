@@ -11,13 +11,13 @@ import (
 	"syscall"
 	"time"
 
-	"book_manager/backend/internal/auth"
 	"book_manager/backend/internal/books"
 	"book_manager/backend/internal/config"
 	"book_manager/backend/internal/db"
 	"book_manager/backend/internal/favorites"
 	"book_manager/backend/internal/follows"
 	"book_manager/backend/internal/openaikeys"
+	"book_manager/backend/internal/firebaseauth"
 	"book_manager/backend/internal/handler"
 	"book_manager/backend/internal/isbn"
 	"book_manager/backend/internal/nexttobuy"
@@ -29,6 +29,7 @@ import (
 	"book_manager/backend/internal/series"
 	"book_manager/backend/internal/userbooks"
 	"book_manager/backend/internal/users"
+	"book_manager/backend/internal/middleware"
 
 	"github.com/joho/godotenv"
 )
@@ -97,7 +98,6 @@ func main() {
 		seriesRepo = repository.NewMemorySeriesRepository()
 		openAIKeyRepo = repository.NewMemoryOpenAIKeyRepository()
 	}
-	authService := auth.NewService(userRepo)
 	isbnCacheTTL := time.Duration(cfg.IsbnCacheTTLMinutes) * time.Minute
 	isbnService := isbn.NewService(cfg.GoogleBooksBaseURL, cfg.GoogleBooksAPIKey, isbnCacheTTL, isbnCacheRepo)
 	bookService := books.NewService(bookRepo)
@@ -116,6 +116,9 @@ func main() {
 	})
 	seriesService := series.NewService(seriesRepo)
 	openAIKeyService := openaikeys.NewService(openAIKeyRepo)
+	firebaseClient := firebaseauth.NewClient(cfg.FirebaseAPIKey)
+	firebaseVerifier := firebaseauth.NewVerifier(cfg.FirebaseProjectID)
+	firebaseMiddleware := middleware.NewFirebaseAuthMiddleware(firebaseVerifier, usersService)
 	if count := normalizeBooks(bookService); count > 0 {
 		log.Printf("normalized %d book titles", count)
 	}
@@ -123,7 +126,8 @@ func main() {
 		log.Printf("normalized %d series names", count)
 	}
 	h := handler.New(
-		authService,
+		firebaseClient,
+		firebaseVerifier,
 		isbnService,
 		bookService,
 		userBookService,
@@ -140,7 +144,7 @@ func main() {
 		aiPrompt,
 		parseAdminUserIDs(cfg.AdminUserIDs),
 	)
-	r := router.New(h, auditLogRepo, cfg.CORSAllowedOrigins)
+	r := router.New(h, auditLogRepo, cfg.CORSAllowedOrigins, firebaseMiddleware.Wrap)
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,

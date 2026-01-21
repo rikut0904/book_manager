@@ -24,7 +24,7 @@ func NewFirebaseAuthMiddleware(verifier *firebaseauth.Verifier, usersService *us
 
 func (m *FirebaseAuthMiddleware) Wrap(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/healthz" || r.Method == http.MethodOptions {
+		if r.URL.Path == "/healthz" || r.Method == http.MethodOptions || strings.HasPrefix(r.URL.Path, "/auth/") {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -44,10 +44,15 @@ func (m *FirebaseAuthMiddleware) Wrap(next http.Handler) http.Handler {
 				return
 			}
 		}
+		if !info.EmailVerified {
+			handler.Unauthorized(w)
+			return
+		}
 		ctx := authctx.WithAuthInfo(r.Context(), authctx.AuthInfo{
 			UserID: info.UserID,
 			Email:  info.Email,
 			Name:   info.Name,
+			EmailVerified: info.EmailVerified,
 		})
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

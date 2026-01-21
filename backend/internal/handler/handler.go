@@ -10,10 +10,11 @@ import (
 	"time"
 
 	"book_manager/backend/internal/ai"
-	"book_manager/backend/internal/auth"
+	"book_manager/backend/internal/authctx"
 	"book_manager/backend/internal/books"
 	"book_manager/backend/internal/domain"
 	"book_manager/backend/internal/favorites"
+	"book_manager/backend/internal/firebaseauth"
 	"book_manager/backend/internal/follows"
 	"book_manager/backend/internal/isbn"
 	"book_manager/backend/internal/nexttobuy"
@@ -26,7 +27,8 @@ import (
 )
 
 type Handler struct {
-	auth               *auth.Service
+	firebaseClient     *firebaseauth.Client
+	firebaseVerifier   *firebaseauth.Verifier
 	isbn               *isbn.Service
 	books              *books.Service
 	userBooks          *userbooks.Service
@@ -45,7 +47,8 @@ type Handler struct {
 }
 
 func New(
-	authService *auth.Service,
+	firebaseClient *firebaseauth.Client,
+	firebaseVerifier *firebaseauth.Verifier,
 	isbnService *isbn.Service,
 	bookService *books.Service,
 	userBookService *userbooks.Service,
@@ -70,7 +73,8 @@ func New(
 		adminMap[userID] = struct{}{}
 	}
 	return &Handler{
-		auth:               authService,
+		firebaseClient:     firebaseClient,
+		firebaseVerifier:   firebaseVerifier,
 		isbn:               isbnService,
 		books:              bookService,
 		userBooks:          userBookService,
@@ -147,28 +151,42 @@ func (h *Handler) AuthSignup(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "display_name_too_long")
 		return
 	}
-	result, err := h.auth.Signup(req.Email, req.Password, normalizedUserID, displayName)
+	if h.firebaseClient == nil {
+		internalError(w)
+		return
+	}
+	if h.users.IsUserIDTaken(normalizedUserID) {
+		conflict(w, "user_id_exists")
+		return
+	}
+	result, err := h.firebaseClient.SignUp(req.Email, req.Password, normalizedUserID)
 	if err != nil {
-		if errors.Is(err, auth.ErrUserExists) {
+		if errors.Is(err, firebaseauth.ErrEmailExists) {
 			conflict(w, "email_exists")
-			return
-		}
-		if errors.Is(err, auth.ErrUserIDExists) {
-			conflict(w, "user_id_exists")
 			return
 		}
 		internalError(w)
 		return
 	}
+	if err := h.firebaseClient.SendEmailVerification(result.IDToken); err != nil {
+		internalError(w)
+		return
+	}
+	user, err := h.users.Create(result.LocalID, req.Email, normalizedUserID, displayName)
+	if err != nil {
+		internalError(w)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"accessToken":  result.AccessToken,
+		"accessToken":  result.IDToken,
 		"refreshToken": result.RefreshToken,
 		"user": map[string]string{
-			"id":          result.User.ID,
-			"email":       result.User.Email,
-			"userId":      result.User.UserID,
-			"displayName": result.User.DisplayName,
+			"id":          user.ID,
+			"email":       user.Email,
+			"userId":      user.UserID,
+			"displayName": user.DisplayName,
 		},
+		"emailVerified": false,
 	})
 }
 
@@ -193,24 +211,52 @@ func (h *Handler) AuthLogin(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "email is invalid")
 		return
 	}
-	result, err := h.auth.Login(req.Email, req.Password)
+	if h.firebaseClient == nil {
+		internalError(w)
+		return
+	}
+	result, err := h.firebaseClient.Login(req.Email, req.Password)
 	if err != nil {
-		if errors.Is(err, auth.ErrInvalidCredentials) {
+		if errors.Is(err, firebaseauth.ErrInvalidCredentials) || errors.Is(err, firebaseauth.ErrEmailNotFound) {
 			unauthorized(w)
 			return
 		}
 		internalError(w)
 		return
 	}
+	if h.firebaseVerifier == nil {
+		internalError(w)
+		return
+	}
+	info, err := h.firebaseVerifier.VerifyIDToken(r.Context(), result.IDToken)
+	if err != nil {
+		unauthorized(w)
+		return
+	}
+	user, ok := h.users.Get(result.LocalID)
+	if !ok {
+		userID := strings.TrimSpace(result.DisplayName)
+		if userID == "" {
+			unauthorized(w)
+			return
+		}
+		created, err := h.users.Create(result.LocalID, result.Email, userID, userID)
+		if err != nil {
+			internalError(w)
+			return
+		}
+		user = created
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"accessToken":  result.AccessToken,
+		"accessToken":  result.IDToken,
 		"refreshToken": result.RefreshToken,
 		"user": map[string]string{
-			"id":          result.User.ID,
-			"email":       result.User.Email,
-			"userId":      result.User.UserID,
-			"displayName": result.User.DisplayName,
+			"id":          user.ID,
+			"email":       user.Email,
+			"userId":      user.UserID,
+			"displayName": user.DisplayName,
 		},
+		"emailVerified": info.EmailVerified,
 	})
 }
 
@@ -234,9 +280,13 @@ func (h *Handler) AuthRefresh(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "refreshToken is required")
 		return
 	}
-	accessToken, refreshToken, err := h.auth.Refresh(req.RefreshToken)
+	if h.firebaseClient == nil {
+		internalError(w)
+		return
+	}
+	result, err := h.firebaseClient.Refresh(req.RefreshToken)
 	if err != nil {
-		if errors.Is(err, auth.ErrInvalidCredentials) {
+		if errors.Is(err, firebaseauth.ErrInvalidCredentials) {
 			unauthorized(w)
 			return
 		}
@@ -244,12 +294,20 @@ func (h *Handler) AuthRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"accessToken":  accessToken,
-		"refreshToken": refreshToken,
+		"accessToken":  result.IDToken,
+		"refreshToken": result.RefreshToken,
 	})
 }
 
 func (h *Handler) AuthLogout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, http.MethodPost)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (h *Handler) AuthResendVerify(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		methodNotAllowed(w, http.MethodPost)
 		return
@@ -261,16 +319,130 @@ func (h *Handler) AuthLogout(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "invalid json")
 		return
 	}
-	if req.RefreshToken == "" {
+	if strings.TrimSpace(req.RefreshToken) == "" {
 		badRequest(w, "refreshToken is required")
+		return
+	}
+	if h.firebaseClient == nil {
+		internalError(w)
+		return
+	}
+	result, err := h.firebaseClient.Refresh(req.RefreshToken)
+	if err != nil {
+		if errors.Is(err, firebaseauth.ErrInvalidCredentials) {
+			unauthorized(w)
+			return
+		}
+		internalError(w)
+		return
+	}
+	if err := h.firebaseClient.SendEmailVerification(result.IDToken); err != nil {
+		internalError(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (h *Handler) AuthUpdateEmail(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPatch {
+		methodNotAllowed(w, http.MethodPatch)
+		return
+	}
+	var req struct {
+		Email        string `json:"email"`
+		RefreshToken string `json:"refreshToken"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		badRequest(w, "invalid json")
+		return
+	}
+	email := strings.TrimSpace(req.Email)
+	if email == "" {
+		badRequest(w, "email_required")
+		return
+	}
+	if !isValidEmail(email) {
+		badRequest(w, "invalid_email")
 		return
 	}
 	if strings.TrimSpace(req.RefreshToken) == "" {
 		badRequest(w, "refreshToken is required")
 		return
 	}
-	h.auth.Logout(req.RefreshToken)
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	if h.firebaseClient == nil {
+		internalError(w)
+		return
+	}
+	refreshed, err := h.firebaseClient.Refresh(req.RefreshToken)
+	if err != nil {
+		if errors.Is(err, firebaseauth.ErrInvalidCredentials) {
+			unauthorized(w)
+			return
+		}
+		internalError(w)
+		return
+	}
+	updated, err := h.firebaseClient.UpdateEmail(refreshed.IDToken, email)
+	if err != nil {
+		if errors.Is(err, firebaseauth.ErrEmailExists) {
+			conflict(w, "email_exists")
+			return
+		}
+		internalError(w)
+		return
+	}
+	if err := h.firebaseClient.SendEmailVerification(updated.IDToken); err != nil {
+		internalError(w)
+		return
+	}
+	user, err := h.users.UpdateProfile(updated.LocalID, nil, &email)
+	if err != nil {
+		if errors.Is(err, users.ErrEmailExists) {
+			conflict(w, "email_exists")
+			return
+		}
+		internalError(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"accessToken":  updated.IDToken,
+		"refreshToken": updated.RefreshToken,
+		"user": map[string]string{
+			"id":          user.ID,
+			"email":       user.Email,
+			"userId":      user.UserID,
+			"displayName": user.DisplayName,
+		},
+		"emailVerified": false,
+	})
+}
+
+func (h *Handler) AuthStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	if h.firebaseVerifier == nil {
+		internalError(w)
+		return
+	}
+	token := bearerToken(r.Header.Get("Authorization"))
+	if token == "" {
+		unauthorized(w)
+		return
+	}
+	info, err := h.firebaseVerifier.VerifyIDToken(r.Context(), token)
+	if err != nil {
+		unauthorized(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"user": map[string]any{
+			"id":            info.UserID,
+			"email":         info.Email,
+			"emailVerified": info.EmailVerified,
+		},
+	})
 }
 
 func (h *Handler) IsbnLookup(w http.ResponseWriter, r *http.Request) {
@@ -1533,13 +1705,28 @@ func pathID(prefix, path string) (string, bool) {
 }
 
 func userIDFromRequest(r *http.Request) string {
+	if value := strings.TrimSpace(authctx.UserIDFromContext(r.Context())); value != "" {
+		return value
+	}
 	if value := strings.TrimSpace(r.Header.Get("X-User-Id")); value != "" {
 		return value
 	}
 	if value := strings.TrimSpace(r.URL.Query().Get("userId")); value != "" {
 		return value
 	}
-	return "user_demo"
+	return ""
+}
+
+func bearerToken(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	parts := strings.SplitN(value, " ", 2)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		return ""
+	}
+	return strings.TrimSpace(parts[1])
 }
 
 func validateBookRequest(req bookRequest) (string, error) {

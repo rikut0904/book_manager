@@ -38,6 +38,7 @@ type AuthInfo struct {
 	UserID string
 	Email  string
 	Name   string
+	EmailVerified bool
 }
 
 type tokenHeader struct {
@@ -55,6 +56,7 @@ type tokenClaims struct {
 	Email  string `json:"email"`
 	UserID string `json:"user_id"`
 	Name   string `json:"name"`
+	EmailVerified bool `json:"email_verified"`
 }
 
 func NewVerifier(projectID string) *Verifier {
@@ -118,6 +120,7 @@ func (v *Verifier) VerifyIDToken(ctx context.Context, token string) (AuthInfo, e
 		UserID: userID,
 		Email:  claims.Email,
 		Name:   claims.Name,
+		EmailVerified: claims.EmailVerified,
 	}, nil
 }
 

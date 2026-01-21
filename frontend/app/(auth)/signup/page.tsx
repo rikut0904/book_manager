@@ -28,6 +28,7 @@ export default function SignupPage() {
         accessToken: string;
         refreshToken: string;
         user: { id: string };
+        emailVerified: boolean;
       }>("/auth/signup", {
         method: "POST",
         body: JSON.stringify(form),
@@ -37,7 +38,11 @@ export default function SignupPage() {
         refreshToken: data.refreshToken,
         userId: data.user.id,
       });
-      router.push("/books");
+      if (data.emailVerified) {
+        router.push("/books");
+      } else {
+        router.push("/verify-email");
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message.trim() : "";
       setError(signupErrorMessages[message] || "登録に失敗しました。");
