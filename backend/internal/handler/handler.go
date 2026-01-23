@@ -235,12 +235,11 @@ func (h *Handler) AuthLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	user, ok := h.users.Get(result.LocalID)
 	if !ok {
-		userID := strings.TrimSpace(result.DisplayName)
-		if userID == "" {
-			unauthorized(w)
-			return
-		}
-		created, err := h.users.Create(result.LocalID, result.Email, userID, userID)
+        userID := strings.TrimSpace(result.DisplayName)
+        if userID == "" {
+            userID = result.LocalID // Firebase DisplayNameが空の場合、LocalIDをデフォルトとして使用
+        }
+        created, err := h.users.Create(result.LocalID, result.Email, userID, userID)
 		if err != nil {
 			internalError(w)
 			return
