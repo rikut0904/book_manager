@@ -76,16 +76,7 @@ func pathToEntity(path string) (string, string) {
 }
 
 func userIDFromRequest(r *http.Request) string {
-	if value := strings.TrimSpace(authctx.UserIDFromContext(r.Context())); value != "" {
-		return value
-	}
-	if value := strings.TrimSpace(r.Header.Get("X-User-Id")); value != "" {
-		return value
-	}
-	if value := strings.TrimSpace(r.URL.Query().Get("userId")); value != "" {
-		return value
-	}
-	return ""
+	return strings.TrimSpace(authctx.UserIDFromContext(r.Context()))
 }
 
 func requestIP(r *http.Request) string {
