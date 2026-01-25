@@ -118,6 +118,20 @@ func main() {
 	openAIKeyService := openaikeys.NewService(openAIKeyRepo)
 	firebaseClient := firebaseauth.NewClient(cfg.FirebaseAPIKey)
 	firebaseVerifier := firebaseauth.NewVerifier(cfg.FirebaseProjectID)
+	var firebaseAdmin *firebaseauth.AdminClient
+	if cfg.FirebaseClientEmail != "" && cfg.FirebasePrivateKey != "" {
+		var err error
+		firebaseAdmin, err = firebaseauth.NewAdminClient(context.Background(), firebaseauth.AdminCredentials{
+			ProjectID:   cfg.FirebaseProjectID,
+			ClientEmail: cfg.FirebaseClientEmail,
+			PrivateKey:  cfg.FirebasePrivateKey,
+		})
+		if err != nil {
+			log.Printf("firebase admin client init error: %v", err)
+		} else {
+			log.Println("firebase admin client initialized")
+		}
+	}
 	firebaseMiddleware := middleware.NewFirebaseAuthMiddleware(firebaseVerifier, usersService)
 	if count := normalizeBooks(bookService); count > 0 {
 		log.Printf("normalized %d book titles", count)
@@ -128,6 +142,7 @@ func main() {
 	h := handler.New(
 		firebaseClient,
 		firebaseVerifier,
+		firebaseAdmin,
 		isbnService,
 		bookService,
 		userBookService,

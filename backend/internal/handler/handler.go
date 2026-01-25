@@ -29,6 +29,7 @@ import (
 type Handler struct {
 	firebaseClient     *firebaseauth.Client
 	firebaseVerifier   *firebaseauth.Verifier
+	firebaseAdmin      *firebaseauth.AdminClient
 	isbn               *isbn.Service
 	books              *books.Service
 	userBooks          *userbooks.Service
@@ -49,6 +50,7 @@ type Handler struct {
 func New(
 	firebaseClient *firebaseauth.Client,
 	firebaseVerifier *firebaseauth.Verifier,
+	firebaseAdmin *firebaseauth.AdminClient,
 	isbnService *isbn.Service,
 	bookService *books.Service,
 	userBookService *userbooks.Service,
@@ -75,6 +77,7 @@ func New(
 	return &Handler{
 		firebaseClient:     firebaseClient,
 		firebaseVerifier:   firebaseVerifier,
+		firebaseAdmin:      firebaseAdmin,
 		isbn:               isbnService,
 		books:              bookService,
 		userBooks:          userBookService,
@@ -302,6 +305,39 @@ func (h *Handler) AuthLogout(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		methodNotAllowed(w, http.MethodPost)
 		return
+	}
+	var req struct {
+		RefreshToken string `json:"refreshToken"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		badRequest(w, "invalid json")
+		return
+	}
+	if strings.TrimSpace(req.RefreshToken) == "" {
+		badRequest(w, "refreshToken is required")
+		return
+	}
+	// リフレッシュトークンからユーザーIDを取得
+	if h.firebaseClient == nil {
+		internalError(w)
+		return
+	}
+	result, err := h.firebaseClient.Refresh(req.RefreshToken)
+	if err != nil {
+		if errors.Is(err, firebaseauth.ErrInvalidCredentials) {
+			// トークンが既に無効な場合は成功として扱う
+			writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+			return
+		}
+		internalError(w)
+		return
+	}
+	// Firebase Admin SDKでリフレッシュトークンを失効
+	if h.firebaseAdmin != nil {
+		if err := h.firebaseAdmin.RevokeRefreshTokens(r.Context(), result.LocalID); err != nil {
+			log.Printf("failed to revoke refresh tokens: %v", err)
+			// 失効に失敗してもログアウト自体は成功として扱う
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
