@@ -21,46 +21,47 @@ export default function VerifyEmailPage() {
   const [editError, setEditError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  const checkStatus = async () => {
-    setError(null);
-    try {
-      const auth = getAuthState();
-      if (!auth?.refreshToken) {
-        throw new Error("missing refresh token");
-      }
-      const refreshed = await fetchJSON<{
-        accessToken: string;
-        refreshToken: string;
-      }>("/auth/refresh", {
-        method: "POST",
-        body: JSON.stringify({ refreshToken: auth.refreshToken }),
-      });
-      setAuthState({
-        accessToken: refreshed.accessToken,
-        refreshToken: refreshed.refreshToken,
-        userId: auth.userId,
-      });
-      const data = await fetchJSON<StatusResponse>("/auth/status", { auth: true });
-      if (data.user?.email) {
-        setCurrentEmail(data.user.email);
-      }
-      if (data.user?.emailVerified) {
-        setStatus("verified");
-        router.push("/books");
-      } else {
-        setStatus("waiting");
-      }
-    } catch {
-      setError("認証状態を確認できませんでした。");
-    }
-  };
-
   useEffect(() => {
     const auth = getAuthState();
     if (!auth?.accessToken) {
       router.push("/login");
       return;
     }
+
+    const checkStatus = async () => {
+      setError(null);
+      try {
+        const currentAuth = getAuthState();
+        if (!currentAuth?.refreshToken) {
+          throw new Error("missing refresh token");
+        }
+        const refreshed = await fetchJSON<{
+          accessToken: string;
+          refreshToken: string;
+        }>("/auth/refresh", {
+          method: "POST",
+          body: JSON.stringify({ refreshToken: currentAuth.refreshToken }),
+        });
+        setAuthState({
+          accessToken: refreshed.accessToken,
+          refreshToken: refreshed.refreshToken,
+          userId: currentAuth.userId,
+        });
+        const data = await fetchJSON<StatusResponse>("/auth/status", { auth: true });
+        if (data.user?.email) {
+          setCurrentEmail(data.user.email);
+        }
+        if (data.user?.emailVerified) {
+          setStatus("verified");
+          router.push("/books");
+        } else {
+          setStatus("waiting");
+        }
+      } catch {
+        setError("認証状態を確認できませんでした。");
+      }
+    };
+
     checkStatus();
     const timer = window.setInterval(checkStatus, 5000);
     return () => window.clearInterval(timer);
