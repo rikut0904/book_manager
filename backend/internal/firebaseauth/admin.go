@@ -3,7 +3,7 @@ package firebaseauth
 import (
 	"context"
 	"encoding/json"
-
+	"strings"
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/auth"
 	"google.golang.org/api/option"
@@ -23,6 +23,8 @@ type AdminCredentials struct {
 
 // NewAdminClient はFirebase Admin SDKクライアントを初期化します
 func NewAdminClient(ctx context.Context, creds AdminCredentials) (*AdminClient, error) {
+	// .envファイルで \n がリテラル文字列として保存されている場合に対応
+	creds.PrivateKey = strings.ReplaceAll(creds.PrivateKey, "\\n", "\n")
 	credentialsJSON, err := json.Marshal(map[string]string{
 		"type":          "service_account",
 		"project_id":    creds.ProjectID,
