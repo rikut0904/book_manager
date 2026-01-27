@@ -40,7 +40,6 @@ func New(
 	mux.HandleFunc("/next-to-buy/manual", h.NextToBuyManual)
 	mux.HandleFunc("/next-to-buy/manual/", h.NextToBuyManualByID)
 
-
 	mux.HandleFunc("/recommendations", h.Recommendations)
 	mux.HandleFunc("/recommendations/", h.RecommendationsByID)
 
@@ -59,6 +58,12 @@ func New(
 	mux.HandleFunc("/admin/openai-keys", h.AdminOpenAIKeys)
 	mux.HandleFunc("/admin/openai-keys/", h.AdminOpenAIKeysByID)
 	mux.HandleFunc("/admin/openai-models", h.AdminOpenAIModels)
+	mux.HandleFunc("/admin/users", h.AdminUsers)
+	mux.HandleFunc("/admin/users/", h.AdminUsersByID)
+	mux.HandleFunc("/admin/invitations", h.AdminInvitations)
+	mux.HandleFunc("/admin/invitations/", h.AdminInvitationsByID)
+
+	mux.HandleFunc("/auth/signup/admin", h.AuthSignupAdmin)
 
 	handlerWithAudit := AuditMiddleware(auditRepo, mux)
 	if authMiddleware != nil {

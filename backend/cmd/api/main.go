@@ -11,16 +11,19 @@ import (
 	"syscall"
 	"time"
 
+	"book_manager/backend/internal/admininvitations"
+	"book_manager/backend/internal/adminusers"
 	"book_manager/backend/internal/books"
 	"book_manager/backend/internal/config"
 	"book_manager/backend/internal/db"
 	"book_manager/backend/internal/favorites"
-	"book_manager/backend/internal/follows"
-	"book_manager/backend/internal/openaikeys"
 	"book_manager/backend/internal/firebaseauth"
+	"book_manager/backend/internal/follows"
 	"book_manager/backend/internal/handler"
 	"book_manager/backend/internal/isbn"
+	"book_manager/backend/internal/middleware"
 	"book_manager/backend/internal/nexttobuy"
+	"book_manager/backend/internal/openaikeys"
 	"book_manager/backend/internal/recommendations"
 	"book_manager/backend/internal/reports"
 	"book_manager/backend/internal/repository"
@@ -29,7 +32,6 @@ import (
 	"book_manager/backend/internal/series"
 	"book_manager/backend/internal/userbooks"
 	"book_manager/backend/internal/users"
-	"book_manager/backend/internal/middleware"
 
 	"github.com/joho/godotenv"
 )
@@ -41,17 +43,19 @@ func main() {
 	cfg := config.Load()
 	aiPrompt := loadPrompt("prompt.md")
 	var (
-		userRepo           repository.UserRepository
-		bookRepo           repository.BookRepository
-		userBookRepo       repository.UserBookRepository
-		profileRepo        repository.ProfileSettingsRepository
-		favoriteRepo       repository.FavoriteRepository
-		nextToBuyRepo      repository.NextToBuyRepository
-		recommendationRepo repository.RecommendationRepository
-		isbnCacheRepo      repository.IsbnCacheRepository
-		auditLogRepo       repository.AuditLogRepository
-		seriesRepo         repository.SeriesRepository
-		openAIKeyRepo      repository.OpenAIKeyRepository
+		userRepo            repository.UserRepository
+		bookRepo            repository.BookRepository
+		userBookRepo        repository.UserBookRepository
+		profileRepo         repository.ProfileSettingsRepository
+		favoriteRepo        repository.FavoriteRepository
+		nextToBuyRepo       repository.NextToBuyRepository
+		recommendationRepo  repository.RecommendationRepository
+		isbnCacheRepo       repository.IsbnCacheRepository
+		auditLogRepo        repository.AuditLogRepository
+		seriesRepo          repository.SeriesRepository
+		openAIKeyRepo       repository.OpenAIKeyRepository
+		adminInvitationRepo repository.AdminInvitationRepository
+		adminUserRepo       repository.AdminUserRepository
 	)
 
 	if cfg.DatabaseURL != "" {
@@ -71,6 +75,8 @@ func main() {
 			&gormrepo.AuditLog{},
 			&gormrepo.Series{},
 			&gormrepo.OpenAIKey{},
+			&gormrepo.AdminInvitation{},
+			&gormrepo.AdminUser{},
 		); err != nil {
 			log.Fatalf("db migrate error: %v", err)
 		}
@@ -85,6 +91,8 @@ func main() {
 		auditLogRepo = gormrepo.NewAuditLogRepository(dbConn)
 		seriesRepo = gormrepo.NewSeriesRepository(dbConn)
 		openAIKeyRepo = gormrepo.NewOpenAIKeyRepository(dbConn)
+		adminInvitationRepo = gormrepo.NewAdminInvitationRepository(dbConn)
+		adminUserRepo = gormrepo.NewAdminUserRepository(dbConn)
 	} else {
 		userRepo = repository.NewMemoryUserRepository()
 		bookRepo = repository.NewMemoryBookRepository()
@@ -97,6 +105,8 @@ func main() {
 		auditLogRepo = repository.NewMemoryAuditLogRepository()
 		seriesRepo = repository.NewMemorySeriesRepository()
 		openAIKeyRepo = repository.NewMemoryOpenAIKeyRepository()
+		adminInvitationRepo = repository.NewMemoryAdminInvitationRepository()
+		adminUserRepo = repository.NewMemoryAdminUserRepository()
 	}
 	isbnCacheTTL := time.Duration(cfg.IsbnCacheTTLMinutes) * time.Minute
 	isbnService := isbn.NewService(cfg.GoogleBooksBaseURL, cfg.GoogleBooksAPIKey, isbnCacheTTL, isbnCacheRepo)
@@ -113,7 +123,7 @@ func main() {
 		User: cfg.SMTPUser,
 		Pass: cfg.SMTPPass,
 		From: cfg.SMTPFrom,
-	})
+	}, cfg.TemplatesDir, cfg.FrontendURL)
 	seriesService := series.NewService(seriesRepo)
 	openAIKeyService := openaikeys.NewService(openAIKeyRepo)
 	firebaseClient := firebaseauth.NewClient(cfg.FirebaseAPIKey)
@@ -139,6 +149,13 @@ func main() {
 	if count := seriesService.NormalizeAll(); count > 0 {
 		log.Printf("normalized %d series names", count)
 	}
+	adminUserIDs := parseAdminUserIDs(cfg.AdminUserIDs)
+	adminUsersService := adminusers.NewService(adminUserRepo, adminUserIDs)
+	adminInvitationsService := admininvitations.NewService(
+		adminInvitationRepo,
+		adminUsersService.IsAdmin,
+		usersService.IsUserIDTaken,
+	)
 	h := handler.New(
 		firebaseClient,
 		firebaseVerifier,
@@ -154,10 +171,11 @@ func main() {
 		reportsService,
 		seriesService,
 		openAIKeyService,
+		adminInvitationsService,
+		adminUsersService,
 		cfg.OpenAIAPIKey,
 		cfg.OpenAIDefaultModel,
 		aiPrompt,
-		parseAdminUserIDs(cfg.AdminUserIDs),
 	)
 	r := router.New(h, auditLogRepo, cfg.CORSAllowedOrigins, firebaseMiddleware.Wrap)
 
@@ -229,7 +247,6 @@ func normalizeBooks(bookService *books.Service) int {
 	}
 	return updated
 }
-
 
 func startAuditCleanup(repo repository.AuditLogRepository) {
 	if repo == nil {

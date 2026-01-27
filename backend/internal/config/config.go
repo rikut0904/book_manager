@@ -26,6 +26,8 @@ type Config struct {
 	FirebaseAPIKey       string
 	FirebaseClientEmail  string
 	FirebasePrivateKey   string
+	FrontendURL          string
+	TemplatesDir         string
 }
 
 func Load() Config {
@@ -50,6 +52,8 @@ func Load() Config {
 		FirebaseAPIKey:       getEnv("FIREBASE_API_KEY", ""),
 		FirebaseClientEmail:  getEnv("FIREBASE_CLIENT_EMAIL", ""),
 		FirebasePrivateKey:   getEnv("FIREBASE_PRIVATE_KEY", ""),
+		FrontendURL:          getEnv("FRONTEND_URL", "http://localhost:3000"),
+		TemplatesDir:         getEnv("TEMPLATES_DIR", "templates"),
 	}
 }
 

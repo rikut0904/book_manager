@@ -102,6 +102,13 @@ func (s *Service) IsUserIDTaken(userID string) bool {
 	return ok
 }
 
+func (s *Service) FindByEmail(email string) (domain.User, bool) {
+	if strings.TrimSpace(email) == "" {
+		return domain.User{}, false
+	}
+	return s.users.FindByEmail(email)
+}
+
 func (s *Service) Delete(userID string) bool {
 	return s.users.Delete(userID)
 }

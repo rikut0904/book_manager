@@ -7,6 +7,18 @@ type FetchOptions = RequestInit & {
   auth?: boolean;
 };
 
+export class APIError extends Error {
+  status: number;
+  data: Record<string, unknown>;
+
+  constructor(message: string, status: number, data: Record<string, unknown> = {}) {
+    super(message);
+    this.name = "APIError";
+    this.status = status;
+    this.data = data;
+  }
+}
+
 export async function fetchJSON<T>(
   path: string,
   options: FetchOptions = {}
@@ -29,13 +41,15 @@ export async function fetchJSON<T>(
   if (!response.ok) {
     const text = await response.text();
     let message = "Request failed";
+    let data: Record<string, unknown> = {};
     try {
       const json = JSON.parse(text);
       message = json.message || json.error || message;
+      data = json;
     } catch {
       message = text || message;
     }
-    throw new Error(message);
+    throw new APIError(message, response.status, data);
   }
 
   return (await response.json()) as T;

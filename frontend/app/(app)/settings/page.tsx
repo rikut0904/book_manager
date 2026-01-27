@@ -1,4 +1,4 @@
- "use client";
+"use client";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -143,6 +143,38 @@ export default function SettingsPage() {
           </Link>
         ) : null}
       </section>
+
+      {isAdmin ? (
+        <section className="rounded-3xl border border-[#e4d8c7] bg-white/70 p-6 shadow-sm">
+          <h2 className="font-[var(--font-display)] text-2xl">管理者メニュー</h2>
+          <p className="mt-2 text-sm text-[#5c5d63]">
+            管理者向けの設定へ移動します。
+          </p>
+          <div className="mt-4 grid gap-3 text-sm md:grid-cols-3">
+            <Link
+              className="rounded-2xl border border-[#e4d8c7] bg-white px-4 py-4 text-[#1b1c1f] transition hover:-translate-y-0.5 hover:shadow-sm"
+              href="/settings/admin-users"
+            >
+              <p className="text-xs text-[#5c5d63]">管理者管理</p>
+              <p className="mt-1 font-medium">権限の付与・削除</p>
+            </Link>
+            <Link
+              className="rounded-2xl border border-[#e4d8c7] bg-white px-4 py-4 text-[#1b1c1f] transition hover:-translate-y-0.5 hover:shadow-sm"
+              href="/settings/invite"
+            >
+              <p className="text-xs text-[#5c5d63]">管理者招待</p>
+              <p className="mt-1 font-medium">招待トークンの発行</p>
+            </Link>
+            <Link
+              className="rounded-2xl border border-[#e4d8c7] bg-white px-4 py-4 text-[#1b1c1f] transition hover:-translate-y-0.5 hover:shadow-sm"
+              href="/settings/ai"
+            >
+              <p className="text-xs text-[#5c5d63]">AI設定</p>
+              <p className="mt-1 font-medium">モデルの選択</p>
+            </Link>
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

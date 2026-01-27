@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"book_manager/backend/internal/admininvitations"
+	"book_manager/backend/internal/adminusers"
 	"book_manager/backend/internal/ai"
 	"book_manager/backend/internal/authctx"
 	"book_manager/backend/internal/books"
@@ -41,10 +43,11 @@ type Handler struct {
 	reports            *reports.Service
 	series             *series.Service
 	openAIKeys         *openaikeys.Service
+	adminInvitations   *admininvitations.Service
+	adminUsers         *adminusers.Service
 	openAIAPIKey       string
 	openAIDefaultModel string
 	aiPrompt           string
-	adminUserIDs       map[string]struct{}
 }
 
 func New(
@@ -62,18 +65,12 @@ func New(
 	reportsService *reports.Service,
 	seriesService *series.Service,
 	openAIKeyService *openaikeys.Service,
+	adminInvitationsService *admininvitations.Service,
+	adminUsersService *adminusers.Service,
 	openAIAPIKey string,
 	openAIDefaultModel string,
 	aiPrompt string,
-	adminUserIDs []string,
 ) *Handler {
-	adminMap := make(map[string]struct{}, len(adminUserIDs))
-	for _, userID := range adminUserIDs {
-		if strings.TrimSpace(userID) == "" {
-			continue
-		}
-		adminMap[userID] = struct{}{}
-	}
 	return &Handler{
 		firebaseClient:     firebaseClient,
 		firebaseVerifier:   firebaseVerifier,
@@ -89,10 +86,11 @@ func New(
 		reports:            reportsService,
 		series:             seriesService,
 		openAIKeys:         openAIKeyService,
+		adminInvitations:   adminInvitationsService,
+		adminUsers:         adminUsersService,
 		openAIAPIKey:       openAIAPIKey,
 		openAIDefaultModel: openAIDefaultModel,
 		aiPrompt:           aiPrompt,
-		adminUserIDs:       adminMap,
 	}
 }
 
@@ -160,6 +158,10 @@ func (h *Handler) AuthSignup(w http.ResponseWriter, r *http.Request) {
 	}
 	if h.users.IsUserIDTaken(normalizedUserID) {
 		conflict(w, "user_id_exists")
+		return
+	}
+	if h.adminUsers != nil && h.adminUsers.IsAdmin(normalizedUserID) {
+		conflict(w, "user_id_reserved")
 		return
 	}
 	result, err := h.firebaseClient.SignUp(req.Email, req.Password, normalizedUserID)
@@ -238,11 +240,11 @@ func (h *Handler) AuthLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	user, ok := h.users.Get(result.LocalID)
 	if !ok {
-        userID := strings.TrimSpace(result.DisplayName)
-        if userID == "" {
-            userID = result.LocalID // Firebase DisplayNameが空の場合、LocalIDをデフォルトとして使用
-        }
-        created, err := h.users.Create(result.LocalID, result.Email, userID, userID)
+		userID := strings.TrimSpace(result.DisplayName)
+		if userID == "" {
+			userID = result.LocalID // Firebase DisplayNameが空の場合、LocalIDをデフォルトとして使用
+		}
+		created, err := h.users.Create(result.LocalID, result.Email, userID, userID)
 		if err != nil {
 			internalError(w)
 			return
@@ -1286,9 +1288,9 @@ func (h *Handler) Users(w http.ResponseWriter, r *http.Request) {
 	result := make([]map[string]string, 0, len(items))
 	for _, user := range items {
 		result = append(result, map[string]string{
-			"id":       user.ID,
-			"email":    user.Email,
-			"userId":   user.UserID,
+			"id":     user.ID,
+			"email":  user.Email,
+			"userId": user.UserID,
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -1468,8 +1470,10 @@ func (h *Handler) isAdminUser(userID string) bool {
 	if !ok {
 		return false
 	}
-	_, isAdmin := h.adminUserIDs[user.UserID]
-	return isAdmin
+	if h.adminUsers == nil {
+		return false
+	}
+	return h.adminUsers.IsAdmin(user.UserID)
 }
 
 func (h *Handler) Follows(w http.ResponseWriter, r *http.Request) {
@@ -1696,6 +1700,342 @@ type openAIModelsResponse struct {
 	Data []struct {
 		ID string `json:"id"`
 	} `json:"data"`
+}
+
+func (h *Handler) AdminInvitations(w http.ResponseWriter, r *http.Request) {
+	if !h.isAdminUser(userIDFromRequest(r)) {
+		forbidden(w, "admin only")
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		items := h.adminInvitations.List()
+		out := make([]map[string]any, 0, len(items))
+		for _, item := range items {
+			out = append(out, map[string]any{
+				"id":        item.ID,
+				"userId":    item.UserID,
+				"email":     item.Email,
+				"createdBy": item.CreatedBy,
+				"expiresAt": item.ExpiresAt,
+				"usedAt":    item.UsedAt,
+				"usedBy":    item.UsedBy,
+				"createdAt": item.CreatedAt,
+			})
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"items": out})
+	case http.MethodPost:
+		var req struct {
+			UserID string `json:"userId"`
+			Email  string `json:"email"`
+		}
+		if err := decodeJSON(r, &req); err != nil {
+			badRequest(w, "invalid json")
+			return
+		}
+		userID := strings.TrimSpace(req.UserID)
+		if userID == "" {
+			badRequest(w, "userId is required")
+			return
+		}
+		email := strings.TrimSpace(req.Email)
+		if email == "" {
+			badRequest(w, "email is required")
+			return
+		}
+		if !isValidEmail(email) {
+			badRequest(w, "invalid_email")
+			return
+		}
+		if existingUser, ok := h.users.FindByEmail(email); ok {
+			writeJSON(w, http.StatusConflict, map[string]any{
+				"error":          "email_exists",
+				"existingUserId": existingUser.UserID,
+			})
+			return
+		}
+		createdBy := userIDFromRequest(r)
+		if h.adminUsers != nil && !h.adminUsers.IsAdmin(userID) {
+			if err := h.adminUsers.Add(userID, createdBy); err != nil && !errors.Is(err, adminusers.ErrAlreadyAdmin) {
+				internalError(w)
+				return
+			}
+		}
+		invitation, err := h.adminInvitations.Create(createdBy, userID, email)
+		if err != nil {
+			if errors.Is(err, admininvitations.ErrUserIDAlreadyTaken) {
+				conflict(w, "user_id_exists")
+				return
+			}
+			if errors.Is(err, admininvitations.ErrUserIDAlreadyInvited) {
+				conflict(w, "user_id_already_invited")
+				return
+			}
+			internalError(w)
+			return
+		}
+		if h.reports != nil && email != "" {
+			h.reports.SendAdminInvitation(reports.AdminInvitationEmail{
+				To:        email,
+				UserID:    userID,
+				Token:     invitation.Token,
+				ExpiresAt: invitation.ExpiresAt,
+			})
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"id":        invitation.ID,
+			"token":     invitation.Token,
+			"userId":    invitation.UserID,
+			"email":     invitation.Email,
+			"expiresAt": invitation.ExpiresAt,
+			"createdAt": invitation.CreatedAt,
+		})
+	default:
+		methodNotAllowed(w, http.MethodGet, http.MethodPost)
+	}
+}
+
+func (h *Handler) AdminInvitationsByID(w http.ResponseWriter, r *http.Request) {
+	if !h.isAdminUser(userIDFromRequest(r)) {
+		forbidden(w, "admin only")
+		return
+	}
+	if _, ok := pathID("/admin/invitations/", r.URL.Path); !ok {
+		notFound(w)
+		return
+	}
+	if r.Method != http.MethodDelete {
+		methodNotAllowed(w, http.MethodDelete)
+		return
+	}
+	id, _ := pathID("/admin/invitations/", r.URL.Path)
+	if !h.adminInvitations.Delete(id) {
+		notFound(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (h *Handler) AdminUsers(w http.ResponseWriter, r *http.Request) {
+	if !h.isAdminUser(userIDFromRequest(r)) {
+		forbidden(w, "admin only")
+		return
+	}
+	if h.adminUsers == nil {
+		internalError(w)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		page := 1
+		if value := strings.TrimSpace(r.URL.Query().Get("page")); value != "" {
+			if parsed, err := strconv.Atoi(value); err == nil && parsed > 0 {
+				page = parsed
+			}
+		}
+		pageSize := 50
+		if value := strings.TrimSpace(r.URL.Query().Get("pageSize")); value != "" {
+			if parsed, err := strconv.Atoi(value); err == nil && parsed > 0 {
+				pageSize = parsed
+			}
+		}
+		if pageSize > 200 {
+			pageSize = 200
+		}
+		items := h.adminUsers.List()
+		total := len(items)
+		start := (page - 1) * pageSize
+		if start < len(items) {
+			end := start + pageSize
+			if end > len(items) {
+				end = len(items)
+			}
+			items = items[start:end]
+		} else if len(items) > 0 {
+			items = []adminusers.AdminUserInfo{}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"items": items,
+			"total": total,
+		})
+	case http.MethodPost:
+		var req struct {
+			UserID string `json:"userId"`
+		}
+		if err := decodeJSON(r, &req); err != nil {
+			badRequest(w, "invalid json")
+			return
+		}
+		userID := strings.TrimSpace(req.UserID)
+		if userID == "" {
+			badRequest(w, "user_id_required")
+			return
+		}
+		if !h.users.IsUserIDTaken(userID) {
+			notFound(w)
+			return
+		}
+		createdBy := userIDFromRequest(r)
+		if err := h.adminUsers.Add(userID, createdBy); err != nil {
+			if errors.Is(err, adminusers.ErrAlreadyAdmin) {
+				conflict(w, "already_admin")
+				return
+			}
+			internalError(w)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	default:
+		methodNotAllowed(w, http.MethodGet, http.MethodPost)
+	}
+}
+
+func (h *Handler) AdminUsersByID(w http.ResponseWriter, r *http.Request) {
+	if !h.isAdminUser(userIDFromRequest(r)) {
+		forbidden(w, "admin only")
+		return
+	}
+	if h.adminUsers == nil {
+		internalError(w)
+		return
+	}
+	if _, ok := pathID("/admin/users/", r.URL.Path); !ok {
+		notFound(w)
+		return
+	}
+	if r.Method != http.MethodDelete {
+		methodNotAllowed(w, http.MethodDelete)
+		return
+	}
+	confirm := strings.TrimSpace(r.URL.Query().Get("confirm"))
+	if confirm != "true" && confirm != "1" && confirm != "yes" {
+		badRequest(w, "confirm_required")
+		return
+	}
+	userID, _ := pathID("/admin/users/", r.URL.Path)
+	if err := h.adminUsers.Remove(userID); err != nil {
+		if errors.Is(err, adminusers.ErrEnvAdmin) {
+			badRequest(w, "cannot_remove_env_admin")
+			return
+		}
+		if errors.Is(err, adminusers.ErrNotDBAdmin) {
+			notFound(w)
+			return
+		}
+		internalError(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (h *Handler) AuthSignupAdmin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, http.MethodPost)
+		return
+	}
+	var req struct {
+		Token       string `json:"token"`
+		Email       string `json:"email"`
+		Password    string `json:"password"`
+		DisplayName string `json:"displayName"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		badRequest(w, "invalid json")
+		return
+	}
+	token := strings.TrimSpace(req.Token)
+	if token == "" {
+		badRequest(w, "token_required")
+		return
+	}
+	email := strings.TrimSpace(req.Email)
+	if email == "" {
+		badRequest(w, "email_required")
+		return
+	}
+	if !isValidEmail(email) {
+		badRequest(w, "invalid_email")
+		return
+	}
+	password := req.Password
+	if password == "" {
+		badRequest(w, "password_required")
+		return
+	}
+	if len(password) < 8 {
+		badRequest(w, "password_too_short")
+		return
+	}
+	displayName := strings.TrimSpace(req.DisplayName)
+	if displayName == "" {
+		displayName = email
+	}
+	if len(displayName) > 50 {
+		badRequest(w, "display_name_too_long")
+		return
+	}
+	invitation, err := h.adminInvitations.ValidateAndCheckEmail(token, email)
+	if err != nil {
+		if errors.Is(err, admininvitations.ErrInvitationNotFound) {
+			badRequest(w, "invalid_token")
+			return
+		}
+		if errors.Is(err, admininvitations.ErrInvitationExpired) {
+			badRequest(w, "token_expired")
+			return
+		}
+		if errors.Is(err, admininvitations.ErrInvitationUsed) {
+			badRequest(w, "token_already_used")
+			return
+		}
+		if errors.Is(err, admininvitations.ErrEmailMismatch) {
+			badRequest(w, "email_mismatch")
+			return
+		}
+		internalError(w)
+		return
+	}
+	if h.firebaseClient == nil {
+		internalError(w)
+		return
+	}
+	result, err := h.firebaseClient.SignUp(email, password, invitation.UserID)
+	if err != nil {
+		if errors.Is(err, firebaseauth.ErrEmailExists) {
+			conflict(w, "email_exists")
+			return
+		}
+		internalError(w)
+		return
+	}
+	if err := h.firebaseClient.SendEmailVerification(result.IDToken); err != nil {
+		log.Printf("failed to send email verification: %v", err)
+	}
+	user, err := h.users.Create(result.LocalID, email, invitation.UserID, displayName)
+	if err != nil {
+		internalError(w)
+		return
+	}
+	if err := h.adminInvitations.MarkUsed(invitation.ID, result.LocalID); err != nil {
+		log.Printf("failed to mark invitation as used: %v", err)
+	}
+	if h.adminUsers != nil {
+		if err := h.adminUsers.Add(invitation.UserID, invitation.CreatedBy); err != nil && !errors.Is(err, adminusers.ErrAlreadyAdmin) {
+			log.Printf("failed to add admin user: %v", err)
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"accessToken":  result.IDToken,
+		"refreshToken": result.RefreshToken,
+		"user": map[string]string{
+			"id":          user.ID,
+			"email":       user.Email,
+			"userId":      user.UserID,
+			"displayName": user.DisplayName,
+		},
+		"emailVerified": false,
+		"isAdmin":       true,
+	})
 }
 
 func fetchOpenAIModels(apiKey string) ([]string, error) {

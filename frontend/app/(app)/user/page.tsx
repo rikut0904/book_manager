@@ -9,6 +9,7 @@ import { commonErrorMessages } from "@/lib/errorMessages";
 
 type UserResponse = {
   user: { id: string; email: string; userId: string; displayName: string };
+  isAdmin?: boolean;
 };
 
 type Favorite = {
@@ -59,6 +60,7 @@ export default function UserPage() {
   const [editForm, setEditForm] = useState({ displayName: "", email: "" });
   const [editError, setEditError] = useState<string | null>(null);
   const [editMessage, setEditMessage] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     const auth = getAuthState();
@@ -72,6 +74,7 @@ export default function UserPage() {
           return;
         }
         setProfile(data.user ?? null);
+        setIsAdmin(Boolean(data.isAdmin));
         setEditForm({
           displayName: data.user?.displayName ?? "",
           email: data.user?.email ?? "",
@@ -130,7 +133,7 @@ export default function UserPage() {
         if (!isMounted) {
           return;
         }
-        setRecError("Suggestを取得できませんでした。");
+        setRecError("おすすめした本を取得できませんでした。");
       });
     return () => {
       isMounted = false;
@@ -367,7 +370,7 @@ export default function UserPage() {
         </div>
         <div className="rounded-3xl border border-[#e4d8c7] bg-white/70 p-6 shadow-sm">
           <div className="flex items-start justify-between gap-3">
-            <h2 className="font-[var(--font-display)] text-2xl">Suggest</h2>
+            <h2 className="font-[var(--font-display)] text-2xl">おすすめした本</h2>
             <Link
               className="text-xs text-[#c86b3c] hover:text-[#8f3d1f]"
               href="/user/suggest"
@@ -380,7 +383,7 @@ export default function UserPage() {
           ) : null}
           {!recError && recs.length === 0 ? (
             <p className="mt-3 text-sm text-[#5c5d63]">
-              まだSuggestがありません。
+              まだおすすめした本がありません。
             </p>
           ) : null}
           <div className="mt-4 grid gap-3">
@@ -389,7 +392,7 @@ export default function UserPage() {
                 key={item.id}
                 className="rounded-2xl border border-[#e4d8c7] bg-white px-4 py-3 text-sm"
               >
-                <p className="text-xs text-[#5c5d63]">Suggest</p>
+                <p className="text-xs text-[#5c5d63]">おすすめした本</p>
                 <p className="mt-1 text-[#1b1c1f]">
                   {getBookTitleWithVolume(item.bookId)}
                 </p>
