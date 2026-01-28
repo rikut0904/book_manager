@@ -150,21 +150,14 @@ export default function AppLayout({
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <div className="hidden items-center gap-2 rounded-full border border-[#e4d8c7] bg-white/80 px-4 py-2 text-xs text-[#5c5d63] md:flex">
-              <span className="h-2 w-2 rounded-full bg-[#c86b3c]" />
-              同期済み
-            </div>
             <div className="flex items-center gap-2 text-sm">
               <div className="text-right">
                 <span className="block text-[#1b1c1f]">
                   {displayName || userId || "user"}
                 </span>
-                <span className="block text-xs text-[#5c5d63]">
-                  @{userId || accountId || "user"}
-                </span>
               </div>
               <div className="h-9 w-9 rounded-full bg-[#1b1c1f] text-center text-sm leading-9 text-white">
-                {(displayName || userId || "U").charAt(0).toUpperCase()}
+                {(userId || "U").charAt(0).toUpperCase()}
               </div>
             </div>
             <button

@@ -8,6 +8,7 @@ import (
 	"book_manager/backend/internal/firebaseauth"
 	"book_manager/backend/internal/handler"
 	"book_manager/backend/internal/users"
+	"book_manager/backend/internal/validation"
 )
 
 type FirebaseAuthMiddleware struct {
@@ -28,7 +29,7 @@ func (m *FirebaseAuthMiddleware) Wrap(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		token := bearerToken(r.Header.Get("Authorization"))
+		token := validation.BearerToken(r.Header.Get("Authorization"))
 		if token == "" {
 			handler.Unauthorized(w)
 			return
@@ -56,16 +57,4 @@ func (m *FirebaseAuthMiddleware) Wrap(next http.Handler) http.Handler {
 		})
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
-}
-
-func bearerToken(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return ""
-	}
-	parts := strings.SplitN(value, " ", 2)
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-		return ""
-	}
-	return strings.TrimSpace(parts[1])
 }

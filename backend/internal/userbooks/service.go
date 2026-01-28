@@ -1,11 +1,10 @@
 package userbooks
 
 import (
-	"crypto/rand"
-	"encoding/base64"
 	"errors"
 
 	"book_manager/backend/internal/domain"
+	"book_manager/backend/internal/idgen"
 	"book_manager/backend/internal/repository"
 )
 
@@ -31,7 +30,7 @@ func NewService(repo repository.UserBookRepository) *Service {
 
 func (s *Service) Create(userID, bookID, note, acquiredAt string) (domain.UserBook, error) {
 	userBook := domain.UserBook{
-		ID:         newID(),
+		ID:         idgen.NewUserBook(),
 		UserID:     userID,
 		BookID:     bookID,
 		Note:       note,
@@ -86,12 +85,4 @@ func (s *Service) Update(id string, input UpdateInput) (domain.UserBook, bool) {
 
 func (s *Service) Delete(id string) bool {
 	return s.repo.Delete(id)
-}
-
-func newID() string {
-	seed := make([]byte, 16)
-	if _, err := rand.Read(seed); err != nil {
-		return "user_book_demo"
-	}
-	return base64.RawURLEncoding.EncodeToString(seed)
 }

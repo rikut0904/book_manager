@@ -73,14 +73,6 @@ export default function SettingsPage() {
           Settings
         </p>
         <h1 className="mt-2 font-[var(--font-display)] text-3xl">設定</h1>
-        <p className="mt-2 text-sm text-[#5c5d63]">
-          シリーズ・プロフィール・AIの設定へ移動します。
-        </p>
-        {username ? (
-          <p className="mt-3 text-sm text-[#1b1c1f]">
-            ユーザー名: {username}
-          </p>
-        ) : null}
       </section>
 
       <section className="rounded-3xl border border-[#e4d8c7] bg-white/70 p-6 shadow-sm">
@@ -130,18 +122,6 @@ export default function SettingsPage() {
             シリーズの追加・確認を行います。
           </p>
         </Link>
-
-        {isAdmin ? (
-          <Link
-            className="rounded-3xl border border-[#e4d8c7] bg-white/70 p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
-            href="/settings/ai"
-          >
-            <h2 className="font-[var(--font-display)] text-2xl">AI設定</h2>
-            <p className="mt-2 text-sm text-[#5c5d63]">
-              OpenAIシリーズ推定の有効化とモデル選択。
-            </p>
-          </Link>
-        ) : null}
       </section>
 
       {isAdmin ? (

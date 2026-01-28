@@ -260,10 +260,6 @@ export default function UserPage() {
             <h1 className="mt-2 font-[var(--font-display)] text-3xl">
               @{profile?.userId || "user"}
             </h1>
-            <div className="mt-2 text-sm text-[#5c5d63]">
-              <p>{profile?.displayName || "ユーザー名未設定"}</p>
-              <p>{profile?.email || "メール未設定"}</p>
-            </div>
           </div>
           <Link
             className="flex h-10 w-10 items-center justify-center rounded-full border border-[#e4d8c7] text-[#5c5d63] hover:bg-white"
