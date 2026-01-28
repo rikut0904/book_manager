@@ -793,6 +793,10 @@ func (h *Handler) UserBooks(w http.ResponseWriter, r *http.Request) {
 				page = parsed
 			}
 		}
+		// 整数オーバーフローを防ぐためページ番号の上限を設定
+		if page > 1000000 {
+			page = 1000000
+		}
 		items := h.userBooks.ListByUser(userID)
 		if bookID != "" {
 			filtered := items[:0]
@@ -1844,6 +1848,10 @@ func (h *Handler) AdminUsers(w http.ResponseWriter, r *http.Request) {
 			if parsed, err := strconv.Atoi(value); err == nil && parsed > 0 {
 				page = parsed
 			}
+		}
+		// 整数オーバーフローを防ぐためページ番号の上限を設定
+		if page > 1000000 {
+			page = 1000000
 		}
 		pageSize := 50
 		if value := strings.TrimSpace(r.URL.Query().Get("pageSize")); value != "" {
