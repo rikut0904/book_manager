@@ -242,6 +242,7 @@ func (h *Handler) AuthLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	info, err := h.firebaseVerifier.VerifyIDToken(r.Context(), result.IDToken)
 	if err != nil {
+		log.Printf("WARNING: ID token verification failed after successful login: %v", err)
 		unauthorized(w)
 		return
 	}
