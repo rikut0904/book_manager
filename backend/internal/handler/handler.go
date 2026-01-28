@@ -166,11 +166,18 @@ func (h *Handler) AuthSignup(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := h.firebaseClient.SignUp(req.Email, req.Password, normalizedUserID)
 	if err != nil {
-		if errors.Is(err, firebaseauth.ErrEmailExists) {
+		switch {
+		case errors.Is(err, firebaseauth.ErrEmailExists):
 			conflict(w, "email_exists")
-			return
+		case errors.Is(err, firebaseauth.ErrWeakPassword):
+			badRequest(w, "weak_password")
+		case errors.Is(err, firebaseauth.ErrInvalidEmail):
+			badRequest(w, "invalid_email")
+		case errors.Is(err, firebaseauth.ErrTooManyAttempts):
+			http.Error(w, "too_many_attempts", http.StatusTooManyRequests)
+		default:
+			internalError(w)
 		}
-		internalError(w)
 		return
 	}
 	if err := h.firebaseClient.SendEmailVerification(result.IDToken); err != nil {

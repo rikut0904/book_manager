@@ -16,6 +16,9 @@ var (
 	ErrUserDisabled        = errors.New("user disabled")
 	ErrEmailNotFound       = errors.New("email not found")
 	ErrOperationNotAllowed = errors.New("operation not allowed")
+	ErrWeakPassword        = errors.New("weak password")
+	ErrInvalidEmail        = errors.New("invalid email")
+	ErrTooManyAttempts     = errors.New("too many attempts")
 )
 
 type Client struct {
@@ -183,7 +186,12 @@ func decodeFirebaseError(resp *http.Response) error {
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		return errors.New("firebase request failed")
 	}
-	switch payload.Error.Message {
+	msg := payload.Error.Message
+	// Firebaseのエラーメッセージは "ERROR_CODE : detail" の形式の場合がある
+	if idx := strings.Index(msg, " : "); idx > 0 {
+		msg = msg[:idx]
+	}
+	switch msg {
 	case "EMAIL_EXISTS":
 		return ErrEmailExists
 	case "INVALID_ID_TOKEN":
@@ -198,6 +206,12 @@ func decodeFirebaseError(resp *http.Response) error {
 		return ErrUserDisabled
 	case "OPERATION_NOT_ALLOWED":
 		return ErrOperationNotAllowed
+	case "WEAK_PASSWORD":
+		return ErrWeakPassword
+	case "INVALID_EMAIL":
+		return ErrInvalidEmail
+	case "TOO_MANY_ATTEMPTS_TRY_LATER":
+		return ErrTooManyAttempts
 	default:
 		if payload.Error.Message == "" {
 			return errors.New("firebase request failed")
