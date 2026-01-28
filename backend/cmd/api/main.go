@@ -126,6 +126,12 @@ func main() {
 	}, cfg.TemplatesDir, cfg.FrontendURL)
 	seriesService := series.NewService(seriesRepo)
 	openAIKeyService := openaikeys.NewService(openAIKeyRepo)
+	if cfg.FirebaseAPIKey == "" {
+		log.Println("WARNING: FIREBASE_API_KEY is not set, authentication features will not work")
+	}
+	if cfg.FirebaseProjectID == "" {
+		log.Println("WARNING: FIREBASE_PROJECT_ID is not set, token verification will not work")
+	}
 	firebaseClient := firebaseauth.NewClient(cfg.FirebaseAPIKey)
 	firebaseVerifier := firebaseauth.NewVerifier(cfg.FirebaseProjectID)
 	var firebaseAdmin *firebaseauth.AdminClient
@@ -141,8 +147,13 @@ func main() {
 		} else {
 			log.Println("firebase admin client initialized")
 		}
+	} else {
+		log.Println("WARNING: Firebase Admin SDK credentials not configured, admin features will be limited")
 	}
 	firebaseMiddleware := middleware.NewFirebaseAuthMiddleware(firebaseVerifier, usersService)
+	if firebaseVerifier == nil {
+		log.Println("WARNING: Firebase auth middleware initialized without verifier")
+	}
 	if count := normalizeBooks(bookService); count > 0 {
 		log.Printf("normalized %d book titles", count)
 	}
