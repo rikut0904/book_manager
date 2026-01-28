@@ -22,6 +22,7 @@ export default function LoginPage() {
         accessToken: string;
         refreshToken: string;
         user: { id: string };
+        emailVerified: boolean;
       }>("/auth/login", {
         method: "POST",
         body: JSON.stringify(form),
@@ -31,7 +32,11 @@ export default function LoginPage() {
         refreshToken: data.refreshToken,
         userId: data.user.id,
       });
-      router.push("/books");
+      if (data.emailVerified) {
+        router.push("/books");
+      } else {
+        router.push("/verify-email");
+      }
     } catch {
       setError("ログインに失敗しました。");
     } finally {

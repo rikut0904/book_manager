@@ -22,6 +22,12 @@ type Config struct {
 	OpenAIAPIKey        string
 	OpenAIDefaultModel  string
 	AdminUserIDs        string
+	FirebaseProjectID    string
+	FirebaseAPIKey       string
+	FirebaseClientEmail  string
+	FirebasePrivateKey   string
+	FrontendURL          string
+	TemplatesDir         string
 }
 
 func Load() Config {
@@ -42,6 +48,12 @@ func Load() Config {
 		OpenAIAPIKey:        getEnv("OPENAI_API_KEY", ""),
 		OpenAIDefaultModel:  getEnv("OPENAI_DEFAULT_MODEL", "gpt-4o-mini"),
 		AdminUserIDs:        getEnv("ADMIN_USER_IDS", ""),
+		FirebaseProjectID:    getEnv("FIREBASE_PROJECT_ID", ""),
+		FirebaseAPIKey:       getEnv("FIREBASE_API_KEY", ""),
+		FirebaseClientEmail:  getEnv("FIREBASE_CLIENT_EMAIL", ""),
+		FirebasePrivateKey:   getEnv("FIREBASE_PRIVATE_KEY", ""),
+		FrontendURL:          getEnv("FRONTEND_URL", "http://localhost:3000"),
+		TemplatesDir:         getEnv("TEMPLATES_DIR", "templates"),
 	}
 }
 

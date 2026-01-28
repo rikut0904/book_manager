@@ -50,9 +50,10 @@ func (s *Service) Ensure(id, email, userID string) (domain.User, error) {
 		return user, nil
 	}
 	user := domain.User{
-		ID:     id,
-		Email:  email,
-		UserID: userID,
+		ID:          id,
+		Email:       email,
+		UserID:      userID,
+		DisplayName: userID,
 	}
 	if err := s.users.Create(user); err != nil {
 		return domain.User{}, err
@@ -78,6 +79,34 @@ func (s *Service) UpdateProfile(id string, displayName *string, email *string) (
 		return domain.User{}, ErrUpdateFailed
 	}
 	return user, nil
+}
+
+func (s *Service) Create(id, email, userID, displayName string) (domain.User, error) {
+	user := domain.User{
+		ID:          id,
+		Email:       email,
+		UserID:      userID,
+		DisplayName: displayName,
+	}
+	if err := s.users.Create(user); err != nil {
+		return domain.User{}, err
+	}
+	return user, nil
+}
+
+func (s *Service) IsUserIDTaken(userID string) bool {
+	if strings.TrimSpace(userID) == "" {
+		return false
+	}
+	_, ok := s.users.FindByUserID(userID)
+	return ok
+}
+
+func (s *Service) FindByEmail(email string) (domain.User, bool) {
+	if strings.TrimSpace(email) == "" {
+		return domain.User{}, false
+	}
+	return s.users.FindByEmail(email)
 }
 
 func (s *Service) Delete(userID string) bool {

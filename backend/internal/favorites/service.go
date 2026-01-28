@@ -1,11 +1,10 @@
 package favorites
 
 import (
-	"crypto/rand"
-	"encoding/base64"
 	"errors"
 
 	"book_manager/backend/internal/domain"
+	"book_manager/backend/internal/idgen"
 	"book_manager/backend/internal/repository"
 )
 
@@ -23,7 +22,7 @@ func NewService(repo repository.FavoriteRepository) *Service {
 
 func (s *Service) Create(userID, favoriteType, bookID, seriesID string) (domain.Favorite, error) {
 	item := domain.Favorite{
-		ID:       newID(),
+		ID:       idgen.NewFavorite(),
 		UserID:   userID,
 		Type:     favoriteType,
 		BookID:   bookID,
@@ -48,12 +47,4 @@ func (s *Service) ListBySeriesID(seriesID string) []domain.Favorite {
 
 func (s *Service) Delete(id string) bool {
 	return s.repo.Delete(id)
-}
-
-func newID() string {
-	seed := make([]byte, 16)
-	if _, err := rand.Read(seed); err != nil {
-		return "favorite_demo"
-	}
-	return base64.RawURLEncoding.EncodeToString(seed)
 }

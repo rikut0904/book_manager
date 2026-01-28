@@ -1,12 +1,11 @@
 package series
 
 import (
-	"crypto/rand"
-	"encoding/base64"
 	"errors"
 	"strings"
 
 	"book_manager/backend/internal/domain"
+	"book_manager/backend/internal/idgen"
 	"book_manager/backend/internal/isbn"
 	"book_manager/backend/internal/repository"
 )
@@ -25,7 +24,7 @@ func (s *Service) Create(name string) (domain.Series, error) {
 	cleaned := sanitizeName(name)
 	normalized := normalizeName(cleaned)
 	series := domain.Series{
-		ID:             newID(),
+		ID:             idgen.NewSeries(),
 		Name:           cleaned,
 		NormalizedName: normalized,
 	}
@@ -89,12 +88,4 @@ func sanitizeName(name string) string {
 		return strings.TrimSpace(name)
 	}
 	return cleaned
-}
-
-func newID() string {
-	seed := make([]byte, 16)
-	if _, err := rand.Read(seed); err != nil {
-		return "series_demo"
-	}
-	return base64.RawURLEncoding.EncodeToString(seed)
 }

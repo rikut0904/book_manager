@@ -101,3 +101,22 @@ type AuditLog struct {
 	UserAgent string
 	CreatedAt time.Time `gorm:"index"`
 }
+
+type AdminInvitation struct {
+	ID        string     `gorm:"primaryKey"`
+	Token     string     `gorm:"uniqueIndex"`
+	Email     string     `gorm:"index"`
+	UserID    string     `gorm:"uniqueIndex"`
+	CreatedBy string     `gorm:"index"`
+	ExpiresAt time.Time  `gorm:"index"`
+	UsedAt    *time.Time
+	UsedBy    string
+	CreatedAt time.Time `gorm:"index"`
+}
+
+type AdminUser struct {
+	ID        string    `gorm:"primaryKey"`
+	UserID    string    `gorm:"uniqueIndex"`
+	CreatedBy string    `gorm:"index"`
+	CreatedAt time.Time `gorm:"index"`
+}

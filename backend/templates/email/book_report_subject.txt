@@ -1,0 +1,1 @@
+[BookManager] 書誌情報の修正提案 ({{.BookID}})
