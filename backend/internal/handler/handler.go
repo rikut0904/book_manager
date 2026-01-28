@@ -244,6 +244,11 @@ func (h *Handler) AuthLogin(w http.ResponseWriter, r *http.Request) {
 		if userID == "" {
 			userID = result.LocalID // Firebase DisplayNameが空の場合、LocalIDをデフォルトとして使用
 		}
+		// 管理者として予約されているUserIDを一般ユーザーが使用することを防ぐ
+		if h.adminUsers != nil && h.adminUsers.IsAdmin(userID) {
+			conflict(w, "user_id_reserved")
+			return
+		}
 		created, err := h.users.Create(result.LocalID, result.Email, userID, userID)
 		if err != nil {
 			internalError(w)
