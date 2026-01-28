@@ -154,6 +154,10 @@ func (s *Service) sendMail(to, subject, body string) {
 	if strings.TrimSpace(to) == "" {
 		return
 	}
+	// メールヘッダーインジェクションを防ぐため改行文字を削除
+	to = strings.ReplaceAll(strings.ReplaceAll(to, "\r", ""), "\n", "")
+	subject = strings.ReplaceAll(strings.ReplaceAll(subject, "\r", ""), "\n", "")
+
 	if s.smtp.Host == "" {
 		log.Printf("email (dry-run):\nTo: %s\nSubject: %s\n\n%s", to, subject, body)
 		return
