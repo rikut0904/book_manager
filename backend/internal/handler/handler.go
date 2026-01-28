@@ -348,10 +348,12 @@ func (h *Handler) AuthLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Firebase Admin SDKでリフレッシュトークンを失効
+	// 注: 失効に失敗してもログアウト自体は成功として扱う
+	// 理由: クライアント側でトークンを削除すれば実質的にログアウトとなり、
+	// ユーザー体験を優先する（Admin SDKが利用不可でも動作させる）
 	if h.firebaseAdmin != nil {
 		if err := h.firebaseAdmin.RevokeRefreshTokens(r.Context(), result.LocalID); err != nil {
-			log.Printf("failed to revoke refresh tokens: %v", err)
-			// 失効に失敗してもログアウト自体は成功として扱う
+			log.Printf("WARNING: failed to revoke refresh tokens for user %s: %v", result.LocalID, err)
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
