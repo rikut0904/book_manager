@@ -45,7 +45,7 @@ func (m *FirebaseAuthMiddleware) Wrap(next http.Handler) http.Handler {
 			}
 		}
 		if !info.EmailVerified {
-			handler.Unauthorized(w)
+			handler.EmailNotVerified(w)
 			return
 		}
 		ctx := authctx.WithAuthInfo(r.Context(), authctx.AuthInfo{
