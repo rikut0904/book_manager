@@ -3,6 +3,7 @@ package adminusers
 import (
 	"errors"
 	"sort"
+	"sync"
 	"time"
 
 	"book_manager/backend/internal/domain"
@@ -20,6 +21,7 @@ var (
 type Service struct {
 	repo        repository.AdminUserRepository
 	envAdminIDs map[string]struct{}
+	mu          sync.RWMutex
 }
 
 func NewService(repo repository.AdminUserRepository, envAdminIDs []string) *Service {
@@ -39,15 +41,20 @@ func (s *Service) IsAdmin(userID string) bool {
 	if userID == "" {
 		return false
 	}
-	if _, ok := s.envAdminIDs[userID]; ok {
+	s.mu.RLock()
+	_, ok := s.envAdminIDs[userID]
+	s.mu.RUnlock()
+	if ok {
 		return true
 	}
-	_, ok := s.repo.FindByUserID(userID)
+	_, ok = s.repo.FindByUserID(userID)
 	return ok
 }
 
 func (s *Service) List() []AdminUserInfo {
 	dbAdmins := s.repo.List()
+
+	s.mu.RLock()
 	result := make([]AdminUserInfo, 0, len(s.envAdminIDs)+len(dbAdmins))
 
 	dbUserIDs := make(map[string]struct{}, len(dbAdmins))
@@ -77,6 +84,7 @@ func (s *Service) List() []AdminUserInfo {
 			InDB:      true,
 		})
 	}
+	s.mu.RUnlock()
 
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].UserID < result[j].UserID
@@ -86,6 +94,8 @@ func (s *Service) List() []AdminUserInfo {
 
 func (s *Service) ListAll() []string {
 	dbAdmins := s.repo.List()
+
+	s.mu.RLock()
 	seen := make(map[string]struct{}, len(s.envAdminIDs)+len(dbAdmins))
 	result := make([]string, 0, len(s.envAdminIDs)+len(dbAdmins))
 
@@ -95,6 +105,8 @@ func (s *Service) ListAll() []string {
 			result = append(result, userID)
 		}
 	}
+	s.mu.RUnlock()
+
 	for _, admin := range dbAdmins {
 		if _, ok := seen[admin.UserID]; !ok {
 			seen[admin.UserID] = struct{}{}
@@ -119,7 +131,11 @@ func (s *Service) Add(userID, createdBy string) error {
 }
 
 func (s *Service) Remove(userID string) error {
-	if _, ok := s.envAdminIDs[userID]; ok {
+	s.mu.RLock()
+	_, isEnv := s.envAdminIDs[userID]
+	s.mu.RUnlock()
+
+	if isEnv {
 		if _, inDB := s.repo.FindByUserID(userID); !inDB {
 			return ErrEnvAdmin
 		}
@@ -132,7 +148,9 @@ func (s *Service) Remove(userID string) error {
 }
 
 func (s *Service) IsEnvAdmin(userID string) bool {
+	s.mu.RLock()
 	_, ok := s.envAdminIDs[userID]
+	s.mu.RUnlock()
 	return ok
 }
 
