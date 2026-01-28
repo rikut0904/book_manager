@@ -40,7 +40,31 @@ func NewService(to string, smtpConfig SMTPConfig, templatesDir string, frontendU
 }
 
 func (s *Service) loadTemplate(name string, data interface{}) (string, error) {
-	path := filepath.Join(s.templatesDir, "email", name)
+	// 入力検証: 空のテンプレート名を拒否
+	if strings.TrimSpace(name) == "" {
+		return "", fmt.Errorf("template name is empty")
+	}
+	// 入力検証: ディレクトリトラバーサルを防止
+	if strings.Contains(name, "..") || strings.ContainsAny(name, "/\\") {
+		return "", fmt.Errorf("invalid template name: %s", name)
+	}
+
+	baseDir := filepath.Join(s.templatesDir, "email")
+	path := filepath.Join(baseDir, name)
+
+	// 最終パスがベースディレクトリ内にあることを確認
+	absBase, err := filepath.Abs(baseDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve base directory: %w", err)
+	}
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve template path: %w", err)
+	}
+	if !strings.HasPrefix(absPath, absBase+string(filepath.Separator)) {
+		return "", fmt.Errorf("invalid template path: %s", name)
+	}
+
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return "", fmt.Errorf("failed to read template %s: %w", name, err)
