@@ -2,6 +2,7 @@ package firebaseauth
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"log"
 	"strings"
@@ -25,16 +26,12 @@ type AdminCredentials struct {
 
 // NewAdminClient はFirebase Admin SDKクライアントを初期化します
 func NewAdminClient(ctx context.Context, creds AdminCredentials) (*AdminClient, error) {
-	// .envファイルで \n がリテラル文字列として保存されている場合に対応
-	if strings.Contains(creds.PrivateKey, "\\n") {
-		log.Println("INFO: Firebase private key contains literal \\n, converting to newlines")
-		creds.PrivateKey = strings.ReplaceAll(creds.PrivateKey, "\\n", "\n")
-	}
+	privateKey := normalizePrivateKey(creds.PrivateKey)
 	credentialsJSON, err := json.Marshal(map[string]string{
 		"type":          "service_account",
 		"project_id":    creds.ProjectID,
 		"client_email":  creds.ClientEmail,
-		"private_key":   creds.PrivateKey,
+		"private_key":   privateKey,
 		"token_uri":     "https://oauth2.googleapis.com/token",
 	})
 	if err != nil {
@@ -63,4 +60,34 @@ func (c *AdminClient) RevokeRefreshTokens(ctx context.Context, uid string) error
 // GetUser はユーザー情報を取得します
 func (c *AdminClient) GetUser(ctx context.Context, uid string) (*auth.UserRecord, error) {
 	return c.authClient.GetUser(ctx, uid)
+}
+
+// DeleteUser はFirebaseからユーザーを削除します
+func (c *AdminClient) DeleteUser(ctx context.Context, uid string) error {
+	return c.authClient.DeleteUser(ctx, uid)
+}
+
+// normalizePrivateKey は秘密鍵を正規化します
+// 以下の形式をサポート:
+// 1. Base64エンコードされた秘密鍵（推奨）
+// 2. リテラル \n を含む秘密鍵（後方互換性）
+// 3. 実際の改行を含む秘密鍵
+func normalizePrivateKey(key string) string {
+	// Base64エンコードされている場合（"-----BEGIN"で始まらない場合）
+	if !strings.HasPrefix(key, "-----BEGIN") && !strings.Contains(key, "\\n") {
+		decoded, err := base64.StdEncoding.DecodeString(key)
+		if err == nil && strings.HasPrefix(string(decoded), "-----BEGIN") {
+			log.Println("INFO: Firebase private key decoded from Base64")
+			return string(decoded)
+		}
+	}
+
+	// リテラル \n を含む場合（後方互換性）
+	if strings.Contains(key, "\\n") {
+		log.Println("INFO: Firebase private key contains literal \\n, converting to newlines")
+		return strings.ReplaceAll(key, "\\n", "\n")
+	}
+
+	// 既に正しい形式
+	return key
 }

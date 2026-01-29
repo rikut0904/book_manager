@@ -126,6 +126,20 @@ func (s *Service) MarkUsed(id, usedBy string) error {
 	return nil
 }
 
+// UnmarkUsed はロールバック用に招待を未使用状態に戻します
+func (s *Service) UnmarkUsed(id string) error {
+	invitation, ok := s.repo.FindByID(id)
+	if !ok {
+		return ErrInvitationNotFound
+	}
+	invitation.UsedAt = nil
+	invitation.UsedBy = ""
+	if !s.repo.Update(invitation) {
+		return ErrInvitationNotFound
+	}
+	return nil
+}
+
 func (s *Service) IsAdminUserID(userID string) bool {
 	if s.isAdminUserID == nil {
 		return false

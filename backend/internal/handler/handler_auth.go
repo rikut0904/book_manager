@@ -95,11 +95,23 @@ func (h *Handler) AuthSignup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.firebaseClient.SendEmailVerification(result.IDToken); err != nil {
+		// メール送信失敗時もロールバック
+		if h.firebaseAdmin != nil {
+			if deleteErr := h.firebaseAdmin.DeleteUser(r.Context(), result.LocalID); deleteErr != nil {
+				log.Printf("CRITICAL: failed to delete firebase user %s during signup rollback: %v", result.LocalID, deleteErr)
+			}
+		}
 		internalError(w)
 		return
 	}
 	user, err := h.users.Create(result.LocalID, req.Email, normalizedUserID, displayName)
 	if err != nil {
+		// ローカルDB作成失敗時はFirebaseユーザーを削除してロールバック
+		if h.firebaseAdmin != nil {
+			if deleteErr := h.firebaseAdmin.DeleteUser(r.Context(), result.LocalID); deleteErr != nil {
+				log.Printf("CRITICAL: failed to delete firebase user %s during signup rollback: %v", result.LocalID, deleteErr)
+			}
+		}
 		internalError(w)
 		return
 	}
@@ -147,10 +159,6 @@ func (h *Handler) AuthLogin(w http.ResponseWriter, r *http.Request) {
 			unauthorized(w)
 			return
 		}
-		internalError(w)
-		return
-	}
-	if h.firebaseVerifier == nil {
 		internalError(w)
 		return
 	}
@@ -388,10 +396,6 @@ func (h *Handler) AuthStatus(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w, http.MethodGet)
 		return
 	}
-	if h.firebaseVerifier == nil {
-		internalError(w)
-		return
-	}
 	token := validation.BearerToken(r.Header.Get("Authorization"))
 	if token == "" {
 		unauthorized(w)
@@ -450,9 +454,6 @@ func (h *Handler) AuthSignupAdmin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	displayName := strings.TrimSpace(req.DisplayName)
-	if displayName == "" {
-		displayName = email
-	}
 	if len(displayName) > config.DisplayNameMaxLength {
 		badRequest(w, "display_name_too_long")
 		return
@@ -478,35 +479,100 @@ func (h *Handler) AuthSignupAdmin(w http.ResponseWriter, r *http.Request) {
 		internalError(w)
 		return
 	}
+
+	// displayNameが未指定の場合はuserIDをデフォルト値として使用
+	// （メールアドレスは公開プロフィールで露出するため使用しない）
+	if displayName == "" {
+		displayName = invitation.UserID
+	}
+
 	if h.firebaseClient == nil {
 		internalError(w)
 		return
 	}
-	result, err := h.firebaseClient.SignUp(email, password, invitation.UserID)
-	if err != nil {
-		if errors.Is(err, firebaseauth.ErrEmailExists) {
+
+	// ロールバック用の状態管理
+	var (
+		firebaseUserCreated bool
+		localUserCreated    bool
+		invitationMarked    bool
+		adminRoleAdded      bool
+		success             bool
+		firebaseUID         string
+	)
+
+	// エラー時のロールバック処理
+	defer func() {
+		if success {
+			return
+		}
+		// 逆順でロールバック
+		if adminRoleAdded && h.adminUsers != nil {
+			if removeErr := h.adminUsers.Remove(invitation.UserID); removeErr != nil {
+				log.Printf("CRITICAL: rollback failed - could not remove admin role for %s: %v", invitation.UserID, removeErr)
+			}
+		}
+		if invitationMarked {
+			if unmarkErr := h.adminInvitations.UnmarkUsed(invitation.ID); unmarkErr != nil {
+				log.Printf("CRITICAL: rollback failed - could not unmark invitation %s: %v", invitation.ID, unmarkErr)
+			}
+		}
+		if localUserCreated && firebaseUID != "" {
+			if !h.users.Delete(firebaseUID) {
+				log.Printf("CRITICAL: rollback failed - could not delete local user %s", firebaseUID)
+			}
+		}
+		if firebaseUserCreated && h.firebaseAdmin != nil && firebaseUID != "" {
+			if deleteErr := h.firebaseAdmin.DeleteUser(r.Context(), firebaseUID); deleteErr != nil {
+				log.Printf("CRITICAL: rollback failed - could not delete firebase user %s: %v", firebaseUID, deleteErr)
+			}
+		}
+	}()
+
+	result, signupErr := h.firebaseClient.SignUp(email, password, invitation.UserID)
+	if signupErr != nil {
+		if errors.Is(signupErr, firebaseauth.ErrEmailExists) {
 			conflict(w, "email_exists")
 			return
 		}
 		internalError(w)
 		return
 	}
-	if err := h.firebaseClient.SendEmailVerification(result.IDToken); err != nil {
-		log.Printf("failed to send email verification: %v", err)
+	firebaseUserCreated = true
+	firebaseUID = result.LocalID
+
+	if verifyErr := h.firebaseClient.SendEmailVerification(result.IDToken); verifyErr != nil {
+		log.Printf("WARNING: failed to send email verification: %v", verifyErr)
+		// メール送信失敗は継続（ユーザーは後で再送信できる）
 	}
-	user, err := h.users.Create(result.LocalID, email, invitation.UserID, displayName)
-	if err != nil {
+
+	user, createErr := h.users.Create(result.LocalID, email, invitation.UserID, displayName)
+	if createErr != nil {
 		internalError(w)
 		return
 	}
-	if err := h.adminInvitations.MarkUsed(invitation.ID, result.LocalID); err != nil {
-		log.Printf("failed to mark invitation as used: %v", err)
+	localUserCreated = true
+
+	if markErr := h.adminInvitations.MarkUsed(invitation.ID, result.LocalID); markErr != nil {
+		log.Printf("ERROR: failed to mark invitation as used: %v", markErr)
+		internalError(w)
+		return
 	}
+	invitationMarked = true
+
 	if h.adminUsers != nil {
-		if err := h.adminUsers.Add(invitation.UserID, invitation.CreatedBy); err != nil && !errors.Is(err, adminusers.ErrAlreadyAdmin) {
-			log.Printf("failed to add admin user: %v", err)
+		if addErr := h.adminUsers.Add(invitation.UserID, invitation.CreatedBy); addErr != nil {
+			if !errors.Is(addErr, adminusers.ErrAlreadyAdmin) {
+				log.Printf("ERROR: failed to add admin user: %v", addErr)
+				internalError(w)
+				return
+			}
+			// ErrAlreadyAdmin の場合は既に管理者なので問題なし
 		}
+		adminRoleAdded = true
 	}
+
+	success = true
 	writeJSON(w, http.StatusOK, map[string]any{
 		"accessToken":  result.IDToken,
 		"refreshToken": result.RefreshToken,

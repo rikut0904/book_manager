@@ -894,9 +894,9 @@ func (h *Handler) Users(w http.ResponseWriter, r *http.Request) {
 	result := make([]map[string]string, 0, len(items))
 	for _, user := range items {
 		result = append(result, map[string]string{
-			"id":     user.ID,
-			"email":  user.Email,
-			"userId": user.UserID,
+			"id":          user.ID,
+			"userId":      user.UserID,
+			"displayName": user.DisplayName,
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -922,13 +922,20 @@ func (h *Handler) UsersByID(w http.ResponseWriter, r *http.Request) {
 	settings := h.users.GetSettings(userID)
 	ownedCount := len(h.userBooks.ListByUser(userID))
 	seriesCount := len(h.series.List())
+
+	// ユーザー情報（メールアドレスは自分のプロフィールを見る場合のみ公開）
+	requestingUserID := userIDFromRequest(r)
+	userInfo := map[string]string{
+		"id":          user.ID,
+		"userId":      user.UserID,
+		"displayName": user.DisplayName,
+	}
+	if requestingUserID == user.ID {
+		userInfo["email"] = user.Email
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
-		"user": map[string]string{
-			"id":          user.ID,
-			"email":       user.Email,
-			"userId":      user.UserID,
-			"displayName": user.DisplayName,
-		},
+		"user":    userInfo,
 		"isAdmin": h.isAdminUser(user.ID),
 		"settings": map[string]any{
 			"visibility":    settings.Visibility,
