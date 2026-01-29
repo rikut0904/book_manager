@@ -100,9 +100,9 @@ func (h *Handler) AuthSignup(w http.ResponseWriter, r *http.Request) {
 			if deleteErr := h.firebaseAdmin.DeleteUser(r.Context(), result.LocalID); deleteErr != nil {
 				log.Printf("CRITICAL: failed to delete firebase user %s during signup rollback: %v", result.LocalID, deleteErr)
 			}
-		}
-		internalError(w)
-		return
+if err := h.firebaseClient.SendEmailVerification(result.IDToken); err != nil {
+		// メール送信に失敗してもサインアップ処理は続行する
+		log.Printf("WARNING: failed to send verification email to %s: %v", req.Email, err)
 	}
 	user, err := h.users.Create(result.LocalID, req.Email, normalizedUserID, displayName)
 	if err != nil {
