@@ -5,28 +5,35 @@ import (
 	"errors"
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
+	"book_manager/backend/internal/admininvitations"
+	"book_manager/backend/internal/adminusers"
 	"book_manager/backend/internal/ai"
-	"book_manager/backend/internal/auth"
+	"book_manager/backend/internal/authctx"
 	"book_manager/backend/internal/books"
+	"book_manager/backend/internal/config"
 	"book_manager/backend/internal/domain"
 	"book_manager/backend/internal/favorites"
+	"book_manager/backend/internal/firebaseauth"
 	"book_manager/backend/internal/follows"
 	"book_manager/backend/internal/isbn"
 	"book_manager/backend/internal/nexttobuy"
 	"book_manager/backend/internal/openaikeys"
+	"book_manager/backend/internal/pagination"
 	"book_manager/backend/internal/recommendations"
 	"book_manager/backend/internal/reports"
 	"book_manager/backend/internal/series"
 	"book_manager/backend/internal/userbooks"
 	"book_manager/backend/internal/users"
+	"book_manager/backend/internal/validation"
 )
 
 type Handler struct {
-	auth               *auth.Service
+	firebaseClient     *firebaseauth.Client
+	firebaseVerifier   *firebaseauth.Verifier
+	firebaseAdmin      *firebaseauth.AdminClient
 	isbn               *isbn.Service
 	books              *books.Service
 	userBooks          *userbooks.Service
@@ -38,14 +45,17 @@ type Handler struct {
 	reports            *reports.Service
 	series             *series.Service
 	openAIKeys         *openaikeys.Service
+	adminInvitations   *admininvitations.Service
+	adminUsers         *adminusers.Service
 	openAIAPIKey       string
 	openAIDefaultModel string
 	aiPrompt           string
-	adminUserIDs       map[string]struct{}
 }
 
 func New(
-	authService *auth.Service,
+	firebaseClient *firebaseauth.Client,
+	firebaseVerifier *firebaseauth.Verifier,
+	firebaseAdmin *firebaseauth.AdminClient,
 	isbnService *isbn.Service,
 	bookService *books.Service,
 	userBookService *userbooks.Service,
@@ -57,20 +67,16 @@ func New(
 	reportsService *reports.Service,
 	seriesService *series.Service,
 	openAIKeyService *openaikeys.Service,
+	adminInvitationsService *admininvitations.Service,
+	adminUsersService *adminusers.Service,
 	openAIAPIKey string,
 	openAIDefaultModel string,
 	aiPrompt string,
-	adminUserIDs []string,
 ) *Handler {
-	adminMap := make(map[string]struct{}, len(adminUserIDs))
-	for _, userID := range adminUserIDs {
-		if strings.TrimSpace(userID) == "" {
-			continue
-		}
-		adminMap[userID] = struct{}{}
-	}
 	return &Handler{
-		auth:               authService,
+		firebaseClient:     firebaseClient,
+		firebaseVerifier:   firebaseVerifier,
+		firebaseAdmin:      firebaseAdmin,
 		isbn:               isbnService,
 		books:              bookService,
 		userBooks:          userBookService,
@@ -82,10 +88,11 @@ func New(
 		reports:            reportsService,
 		series:             seriesService,
 		openAIKeys:         openAIKeyService,
+		adminInvitations:   adminInvitationsService,
+		adminUsers:         adminUsersService,
 		openAIAPIKey:       openAIAPIKey,
 		openAIDefaultModel: openAIDefaultModel,
 		aiPrompt:           aiPrompt,
-		adminUserIDs:       adminMap,
 	}
 }
 
@@ -93,184 +100,6 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{
 		"status": "ok",
 	})
-}
-
-func (h *Handler) AuthSignup(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		methodNotAllowed(w, http.MethodPost)
-		return
-	}
-	var req struct {
-		Email       string `json:"email"`
-		Password    string `json:"password"`
-		UserID      string `json:"userId"`
-		DisplayName string `json:"displayName"`
-	}
-	if err := decodeJSON(r, &req); err != nil {
-		badRequest(w, "invalid json")
-		return
-	}
-	if req.Email == "" {
-		badRequest(w, "email_required")
-		return
-	}
-	if req.Password == "" {
-		badRequest(w, "password_required")
-		return
-	}
-	if !isValidEmail(req.Email) {
-		badRequest(w, "invalid_email")
-		return
-	}
-	if len(req.Password) < 8 {
-		badRequest(w, "password_too_short")
-		return
-	}
-	normalizedUserID := strings.TrimSpace(req.UserID)
-	if normalizedUserID == "" {
-		badRequest(w, "user_id_required")
-		return
-	}
-	if len(normalizedUserID) < 2 {
-		badRequest(w, "user_id_too_short")
-		return
-	}
-	if len(normalizedUserID) > 20 {
-		badRequest(w, "user_id_too_long")
-		return
-	}
-	displayName := strings.TrimSpace(req.DisplayName)
-	if displayName == "" {
-		displayName = normalizedUserID // 表示名が未指定の場合はユーザーIDと同じにする
-	}
-	if len(displayName) > 50 {
-		badRequest(w, "display_name_too_long")
-		return
-	}
-	result, err := h.auth.Signup(req.Email, req.Password, normalizedUserID, displayName)
-	if err != nil {
-		if errors.Is(err, auth.ErrUserExists) {
-			conflict(w, "email_exists")
-			return
-		}
-		if errors.Is(err, auth.ErrUserIDExists) {
-			conflict(w, "user_id_exists")
-			return
-		}
-		internalError(w)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"accessToken":  result.AccessToken,
-		"refreshToken": result.RefreshToken,
-		"user": map[string]string{
-			"id":          result.User.ID,
-			"email":       result.User.Email,
-			"userId":      result.User.UserID,
-			"displayName": result.User.DisplayName,
-		},
-	})
-}
-
-func (h *Handler) AuthLogin(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		methodNotAllowed(w, http.MethodPost)
-		return
-	}
-	var req struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
-	}
-	if err := decodeJSON(r, &req); err != nil {
-		badRequest(w, "invalid json")
-		return
-	}
-	if req.Email == "" || req.Password == "" {
-		badRequest(w, "email and password are required")
-		return
-	}
-	if !isValidEmail(req.Email) {
-		badRequest(w, "email is invalid")
-		return
-	}
-	result, err := h.auth.Login(req.Email, req.Password)
-	if err != nil {
-		if errors.Is(err, auth.ErrInvalidCredentials) {
-			unauthorized(w)
-			return
-		}
-		internalError(w)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"accessToken":  result.AccessToken,
-		"refreshToken": result.RefreshToken,
-		"user": map[string]string{
-			"id":          result.User.ID,
-			"email":       result.User.Email,
-			"userId":      result.User.UserID,
-			"displayName": result.User.DisplayName,
-		},
-	})
-}
-
-func (h *Handler) AuthRefresh(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		methodNotAllowed(w, http.MethodPost)
-		return
-	}
-	var req struct {
-		RefreshToken string `json:"refreshToken"`
-	}
-	if err := decodeJSON(r, &req); err != nil {
-		badRequest(w, "invalid json")
-		return
-	}
-	if req.RefreshToken == "" {
-		badRequest(w, "refreshToken is required")
-		return
-	}
-	if strings.TrimSpace(req.RefreshToken) == "" {
-		badRequest(w, "refreshToken is required")
-		return
-	}
-	accessToken, refreshToken, err := h.auth.Refresh(req.RefreshToken)
-	if err != nil {
-		if errors.Is(err, auth.ErrInvalidCredentials) {
-			unauthorized(w)
-			return
-		}
-		internalError(w)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"accessToken":  accessToken,
-		"refreshToken": refreshToken,
-	})
-}
-
-func (h *Handler) AuthLogout(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		methodNotAllowed(w, http.MethodPost)
-		return
-	}
-	var req struct {
-		RefreshToken string `json:"refreshToken"`
-	}
-	if err := decodeJSON(r, &req); err != nil {
-		badRequest(w, "invalid json")
-		return
-	}
-	if req.RefreshToken == "" {
-		badRequest(w, "refreshToken is required")
-		return
-	}
-	if strings.TrimSpace(req.RefreshToken) == "" {
-		badRequest(w, "refreshToken is required")
-		return
-	}
-	h.auth.Logout(req.RefreshToken)
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 func (h *Handler) IsbnLookup(w http.ResponseWriter, r *http.Request) {
@@ -566,12 +395,7 @@ func (h *Handler) UserBooks(w http.ResponseWriter, r *http.Request) {
 		bookID := strings.TrimSpace(r.URL.Query().Get("bookId"))
 		query := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("query")))
 		seriesID := strings.TrimSpace(r.URL.Query().Get("series"))
-		page := 1
-		if value := strings.TrimSpace(r.URL.Query().Get("page")); value != "" {
-			if parsed, err := strconv.Atoi(value); err == nil && parsed > 0 {
-				page = parsed
-			}
-		}
+		paging := pagination.ParseParams(r, config.DefaultPageSize)
 		items := h.userBooks.ListByUser(userID)
 		if bookID != "" {
 			filtered := items[:0]
@@ -610,17 +434,8 @@ func (h *Handler) UserBooks(w http.ResponseWriter, r *http.Request) {
 			}
 			items = filtered
 		}
-		const pageSize = 20
-		start := (page - 1) * pageSize
-		if start < len(items) {
-			end := start + pageSize
-			if end > len(items) {
-				end = len(items)
-			}
-			items = items[start:end]
-		} else if len(items) > 0 {
-			items = []domain.UserBook{}
-		}
+		start, end := paging.SliceRange(len(items))
+		items = items[start:end]
 		writeJSON(w, http.StatusOK, map[string]any{
 			"items": items,
 		})
@@ -1079,9 +894,9 @@ func (h *Handler) Users(w http.ResponseWriter, r *http.Request) {
 	result := make([]map[string]string, 0, len(items))
 	for _, user := range items {
 		result = append(result, map[string]string{
-			"id":       user.ID,
-			"email":    user.Email,
-			"userId":   user.UserID,
+			"id":          user.ID,
+			"userId":      user.UserID,
+			"displayName": user.DisplayName,
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -1107,13 +922,20 @@ func (h *Handler) UsersByID(w http.ResponseWriter, r *http.Request) {
 	settings := h.users.GetSettings(userID)
 	ownedCount := len(h.userBooks.ListByUser(userID))
 	seriesCount := len(h.series.List())
+
+	// ユーザー情報（メールアドレスは自分のプロフィールを見る場合のみ公開）
+	requestingUserID := userIDFromRequest(r)
+	userInfo := map[string]string{
+		"id":          user.ID,
+		"userId":      user.UserID,
+		"displayName": user.DisplayName,
+	}
+	if requestingUserID == user.ID {
+		userInfo["email"] = user.Email
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
-		"user": map[string]string{
-			"id":          user.ID,
-			"email":       user.Email,
-			"userId":      user.UserID,
-			"displayName": user.DisplayName,
-		},
+		"user":    userInfo,
 		"isAdmin": h.isAdminUser(user.ID),
 		"settings": map[string]any{
 			"visibility":    settings.Visibility,
@@ -1149,7 +971,7 @@ func (h *Handler) UsersMe(w http.ResponseWriter, r *http.Request) {
 		var displayName *string
 		if req.DisplayName != nil {
 			value := strings.TrimSpace(*req.DisplayName)
-			if len(value) > 50 {
+			if len(value) > config.DisplayNameMaxLength {
 				badRequest(w, "display_name_too_long")
 				return
 			}
@@ -1162,7 +984,7 @@ func (h *Handler) UsersMe(w http.ResponseWriter, r *http.Request) {
 				badRequest(w, "email_required")
 				return
 			}
-			if !isValidEmail(value) {
+			if !validation.IsValidEmail(value) {
 				badRequest(w, "invalid_email")
 				return
 			}
@@ -1261,8 +1083,10 @@ func (h *Handler) isAdminUser(userID string) bool {
 	if !ok {
 		return false
 	}
-	_, isAdmin := h.adminUserIDs[user.UserID]
-	return isAdmin
+	if h.adminUsers == nil {
+		return false
+	}
+	return h.adminUsers.IsAdmin(user.UserID)
 }
 
 func (h *Handler) Follows(w http.ResponseWriter, r *http.Request) {
@@ -1491,6 +1315,210 @@ type openAIModelsResponse struct {
 	} `json:"data"`
 }
 
+func (h *Handler) AdminInvitations(w http.ResponseWriter, r *http.Request) {
+	if !h.isAdminUser(userIDFromRequest(r)) {
+		forbidden(w, "admin only")
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		items := h.adminInvitations.List()
+		out := make([]map[string]any, 0, len(items))
+		for _, item := range items {
+			out = append(out, map[string]any{
+				"id":        item.ID,
+				"userId":    item.UserID,
+				"email":     item.Email,
+				"createdBy": item.CreatedBy,
+				"expiresAt": item.ExpiresAt,
+				"usedAt":    item.UsedAt,
+				"usedBy":    item.UsedBy,
+				"createdAt": item.CreatedAt,
+			})
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"items": out})
+	case http.MethodPost:
+		var req struct {
+			UserID string `json:"userId"`
+			Email  string `json:"email"`
+		}
+		if err := decodeJSON(r, &req); err != nil {
+			badRequest(w, "invalid json")
+			return
+		}
+		userID := strings.TrimSpace(req.UserID)
+		if userID == "" {
+			badRequest(w, "userId is required")
+			return
+		}
+		email := strings.TrimSpace(req.Email)
+		if email == "" {
+			badRequest(w, "email is required")
+			return
+		}
+		if !validation.IsValidEmail(email) {
+			badRequest(w, "invalid_email")
+			return
+		}
+		if existingUser, ok := h.users.FindByEmail(email); ok {
+			writeJSON(w, http.StatusConflict, map[string]any{
+				"error":          "email_exists",
+				"existingUserId": existingUser.UserID,
+			})
+			return
+		}
+		createdBy := userIDFromRequest(r)
+		if h.adminUsers != nil && !h.adminUsers.IsAdmin(userID) {
+			if err := h.adminUsers.Add(userID, createdBy); err != nil && !errors.Is(err, adminusers.ErrAlreadyAdmin) {
+				internalError(w)
+				return
+			}
+		}
+		invitation, err := h.adminInvitations.Create(createdBy, userID, email)
+		if err != nil {
+			if errors.Is(err, admininvitations.ErrUserIDAlreadyTaken) {
+				conflict(w, "user_id_exists")
+				return
+			}
+			if errors.Is(err, admininvitations.ErrUserIDAlreadyInvited) {
+				conflict(w, "user_id_already_invited")
+				return
+			}
+			internalError(w)
+			return
+		}
+		if h.reports != nil && email != "" {
+			h.reports.SendAdminInvitation(reports.AdminInvitationEmail{
+				To:        email,
+				UserID:    userID,
+				Token:     invitation.Token,
+				ExpiresAt: invitation.ExpiresAt,
+			})
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"id":        invitation.ID,
+			"token":     invitation.Token,
+			"userId":    invitation.UserID,
+			"email":     invitation.Email,
+			"expiresAt": invitation.ExpiresAt,
+			"createdAt": invitation.CreatedAt,
+		})
+	default:
+		methodNotAllowed(w, http.MethodGet, http.MethodPost)
+	}
+}
+
+func (h *Handler) AdminInvitationsByID(w http.ResponseWriter, r *http.Request) {
+	if !h.isAdminUser(userIDFromRequest(r)) {
+		forbidden(w, "admin only")
+		return
+	}
+	if _, ok := pathID("/admin/invitations/", r.URL.Path); !ok {
+		notFound(w)
+		return
+	}
+	if r.Method != http.MethodDelete {
+		methodNotAllowed(w, http.MethodDelete)
+		return
+	}
+	id, _ := pathID("/admin/invitations/", r.URL.Path)
+	if !h.adminInvitations.Delete(id) {
+		notFound(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (h *Handler) AdminUsers(w http.ResponseWriter, r *http.Request) {
+	if !h.isAdminUser(userIDFromRequest(r)) {
+		forbidden(w, "admin only")
+		return
+	}
+	if h.adminUsers == nil {
+		internalError(w)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		paging := pagination.ParseParams(r, config.AdminPageSize)
+		items := h.adminUsers.List()
+		total := len(items)
+		start, end := paging.SliceRange(len(items))
+		items = items[start:end]
+		writeJSON(w, http.StatusOK, map[string]any{
+			"items": items,
+			"total": total,
+		})
+	case http.MethodPost:
+		var req struct {
+			UserID string `json:"userId"`
+		}
+		if err := decodeJSON(r, &req); err != nil {
+			badRequest(w, "invalid json")
+			return
+		}
+		userID := strings.TrimSpace(req.UserID)
+		if userID == "" {
+			badRequest(w, "user_id_required")
+			return
+		}
+		if !h.users.IsUserIDTaken(userID) {
+			notFound(w)
+			return
+		}
+		createdBy := userIDFromRequest(r)
+		if err := h.adminUsers.Add(userID, createdBy); err != nil {
+			if errors.Is(err, adminusers.ErrAlreadyAdmin) {
+				conflict(w, "already_admin")
+				return
+			}
+			internalError(w)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	default:
+		methodNotAllowed(w, http.MethodGet, http.MethodPost)
+	}
+}
+
+func (h *Handler) AdminUsersByID(w http.ResponseWriter, r *http.Request) {
+	if !h.isAdminUser(userIDFromRequest(r)) {
+		forbidden(w, "admin only")
+		return
+	}
+	if h.adminUsers == nil {
+		internalError(w)
+		return
+	}
+	if _, ok := pathID("/admin/users/", r.URL.Path); !ok {
+		notFound(w)
+		return
+	}
+	if r.Method != http.MethodDelete {
+		methodNotAllowed(w, http.MethodDelete)
+		return
+	}
+	confirm := strings.TrimSpace(r.URL.Query().Get("confirm"))
+	if confirm != "true" && confirm != "1" && confirm != "yes" {
+		badRequest(w, "confirm_required")
+		return
+	}
+	userID, _ := pathID("/admin/users/", r.URL.Path)
+	if err := h.adminUsers.Remove(userID); err != nil {
+		if errors.Is(err, adminusers.ErrEnvAdmin) {
+			badRequest(w, "cannot_remove_env_admin")
+			return
+		}
+		if errors.Is(err, adminusers.ErrNotDBAdmin) {
+			notFound(w)
+			return
+		}
+		internalError(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
 func fetchOpenAIModels(apiKey string) ([]string, error) {
 	req, err := http.NewRequest(http.MethodGet, "https://api.openai.com/v1/models", nil)
 	if err != nil {
@@ -1533,13 +1561,7 @@ func pathID(prefix, path string) (string, bool) {
 }
 
 func userIDFromRequest(r *http.Request) string {
-	if value := strings.TrimSpace(r.Header.Get("X-User-Id")); value != "" {
-		return value
-	}
-	if value := strings.TrimSpace(r.URL.Query().Get("userId")); value != "" {
-		return value
-	}
-	return "user_demo"
+	return strings.TrimSpace(authctx.UserIDFromContext(r.Context()))
 }
 
 func validateBookRequest(req bookRequest) (string, error) {
@@ -1592,21 +1614,6 @@ func isISODate(value string) bool {
 	}
 	_, err := time.Parse("2006-01-02", value)
 	return err == nil
-}
-
-func isValidEmail(value string) bool {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return false
-	}
-	parts := strings.Split(value, "@")
-	if len(parts) != 2 {
-		return false
-	}
-	if parts[0] == "" || parts[1] == "" {
-		return false
-	}
-	return strings.Contains(parts[1], ".")
 }
 
 func containsAuthor(authors []string, query string) bool {

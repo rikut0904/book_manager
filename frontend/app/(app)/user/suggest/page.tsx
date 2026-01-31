@@ -46,7 +46,7 @@ export default function SuggestPage() {
         if (!isMounted) {
           return;
         }
-        setError("Suggestを取得できませんでした。");
+        setError("おすすめした本を取得できませんでした。");
       });
     return () => {
       isMounted = false;
@@ -120,7 +120,7 @@ export default function SuggestPage() {
       setForm({ bookId: "", comment: "" });
       loadItems();
     } catch {
-      setSubmitError("Suggestの投稿に失敗しました。");
+      setSubmitError("おすすめした本の投稿に失敗しました。");
     }
   };
 
@@ -169,9 +169,9 @@ export default function SuggestPage() {
         <p className="mt-4 text-xs uppercase tracking-[0.3em] text-[#c86b3c]">
           Suggest
         </p>
-        <h1 className="mt-2 font-[var(--font-display)] text-3xl">Suggest</h1>
+        <h1 className="mt-2 font-[var(--font-display)] text-3xl">おすすめした本</h1>
         <p className="mt-2 text-sm text-[#5c5d63]">
-          みんなのSuggestがタイムライン形式で表示されます。
+          みんなのおすすめした本がタイムライン形式で表示されます。
         </p>
       </section>
 
@@ -183,7 +183,7 @@ export default function SuggestPage() {
         ) : null}
         {!error && items.length === 0 ? (
           <div className="rounded-3xl border border-[#e4d8c7] bg-white/70 p-6 text-sm text-[#5c5d63]">
-            まだSuggestが投稿されていません。
+            まだおすすめした本が投稿されていません。
           </div>
         ) : null}
         {items.map((item) => (
@@ -208,7 +208,7 @@ export default function SuggestPage() {
       </section>
 
       <section className="rounded-3xl border border-[#e4d8c7] bg-white/70 p-6 shadow-sm">
-        <h2 className="font-[var(--font-display)] text-2xl">Suggest投稿</h2>
+        <h2 className="font-[var(--font-display)] text-2xl">おすすめした本を投稿</h2>
         <div className="mt-4 flex flex-col gap-3 text-sm">
           <select
             className="rounded-2xl border border-[#e4d8c7] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c86b3c]"

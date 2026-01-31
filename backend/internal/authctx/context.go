@@ -6,6 +6,7 @@ type AuthInfo struct {
 	UserID string
 	Email  string
 	Name   string
+	EmailVerified bool
 }
 
 type contextKey string

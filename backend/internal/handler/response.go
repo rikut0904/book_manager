@@ -52,6 +52,13 @@ func Unauthorized(w http.ResponseWriter) {
 	unauthorized(w)
 }
 
+func EmailNotVerified(w http.ResponseWriter) {
+	writeJSON(w, http.StatusForbidden, map[string]string{
+		"error":   "forbidden",
+		"message": "email_not_verified",
+	})
+}
+
 func forbidden(w http.ResponseWriter, message string) {
 	writeJSON(w, http.StatusForbidden, map[string]string{
 		"error":   "forbidden",
