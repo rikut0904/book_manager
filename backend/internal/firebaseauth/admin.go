@@ -73,21 +73,27 @@ func (c *AdminClient) DeleteUser(ctx context.Context, uid string) error {
 // 2. リテラル \n を含む秘密鍵（後方互換性）
 // 3. 実際の改行を含む秘密鍵
 func normalizePrivateKey(key string) string {
-	// Base64エンコードされている場合（"-----BEGIN"で始まらない場合）
-	if !strings.HasPrefix(key, "-----BEGIN") && !strings.Contains(key, "\\n") {
-		decoded, err := base64.StdEncoding.DecodeString(key)
-		if err == nil && strings.HasPrefix(string(decoded), "-----BEGIN") {
-			log.Println("INFO: Firebase private key decoded from Base64")
-			return string(decoded)
-		}
-	}
+	key = strings.TrimSpace(key)
 
-	// リテラル \n を含む場合（後方互換性）
+	// リテラル \n を含む場合（後方互換性）- 最初にチェック
 	if strings.Contains(key, "\\n") {
 		log.Println("INFO: Firebase private key contains literal \\n, converting to newlines")
 		return strings.ReplaceAll(key, "\\n", "\n")
 	}
 
-	// 既に正しい形式
+	// 既にPEM形式の場合はそのまま返す
+	if strings.HasPrefix(key, "-----BEGIN") {
+		return key
+	}
+
+	// Base64エンコードされている場合
+	decoded, err := base64.StdEncoding.DecodeString(key)
+	if err == nil && strings.HasPrefix(string(decoded), "-----BEGIN") {
+		log.Println("INFO: Firebase private key decoded from Base64")
+		return string(decoded)
+	}
+
+	// どの形式にも該当しない場合は元の値を返す（エラーは初期化時に発生する）
+	log.Printf("WARNING: Firebase private key format not recognized")
 	return key
 }
