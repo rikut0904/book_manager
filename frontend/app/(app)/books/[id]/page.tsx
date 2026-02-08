@@ -46,68 +46,29 @@ export default function BookDetailPage() {
       return;
     }
     let isMounted = true;
-    fetchJSON<Book>(`/books/${params.id}`, { auth: true })
+    fetchJSON<{
+      book: Book;
+      userBook: UserBook | null;
+      favorites: Favorite[];
+    }>(`/books/detail?bookId=${encodeURIComponent(params.id)}`, { auth: true })
       .then((data) => {
         if (!isMounted) {
           return;
         }
-        setBook(data);
+        setBook(data.book ?? null);
+        setFavorites(data.favorites ?? []);
+        if (data.userBook?.seriesId) {
+          router.replace(`/books/series/${data.userBook.seriesId}/${params.id}`);
+          return;
+        }
+        setUserBook(data.userBook ?? null);
       })
       .catch(() => {
         if (!isMounted) {
           return;
         }
         setError("書籍詳細を取得できませんでした。");
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, [params?.id, router]);
-
-  useEffect(() => {
-    let isMounted = true;
-    fetchJSON<{ items: Favorite[] }>("/favorites", { auth: true })
-      .then((data) => {
-        if (!isMounted) {
-          return;
-        }
-        setFavorites(data.items ?? []);
-      })
-      .catch(() => {
-        if (!isMounted) {
-          return;
-        }
         setFavorites([]);
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!params?.id) {
-      return;
-    }
-    let isMounted = true;
-    fetchJSON<{ items: UserBook[] }>(
-      `/user-books?bookId=${encodeURIComponent(params.id)}`,
-      { auth: true }
-    )
-      .then((data) => {
-        if (!isMounted) {
-          return;
-        }
-        const item = data.items?.[0] ?? null;
-        if (item?.seriesId) {
-          router.replace(`/books/series/${item.seriesId}/${params.id}`);
-          return;
-        }
-        setUserBook(item);
-      })
-      .catch(() => {
-        if (!isMounted) {
-          return;
-        }
         setUserBook(null);
       });
     return () => {

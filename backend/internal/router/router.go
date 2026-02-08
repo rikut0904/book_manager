@@ -27,6 +27,9 @@ func New(
 	mux.HandleFunc("/isbn/lookup", h.IsbnLookup)
 
 	mux.HandleFunc("/books", h.Books)
+	mux.HandleFunc("/books/overview", h.BooksOverview)
+	mux.HandleFunc("/books/detail", h.BookDetailData)
+	mux.HandleFunc("/books/edit-data", h.BookEditData)
 	mux.HandleFunc("/books/", h.BookByID)
 
 	mux.HandleFunc("/user-books", h.UserBooks)
@@ -45,14 +48,17 @@ func New(
 
 	mux.HandleFunc("/users", h.Users)
 	mux.HandleFunc("/users/", h.UsersByID)
+	mux.HandleFunc("/users/profile", h.UsersProfile)
 	mux.HandleFunc("/users/me", h.UsersMe)
 	mux.HandleFunc("/users/me/settings", h.UsersMeSettings)
+	mux.HandleFunc("/user/dashboard", h.UserDashboard)
 
 	mux.HandleFunc("/follows/", h.Follows)
 
 	mux.HandleFunc("/book-reports", h.BookReports)
 
 	mux.HandleFunc("/series", h.Series)
+	mux.HandleFunc("/series/detail", h.SeriesDetail)
 	mux.HandleFunc("/series/", h.SeriesByID)
 
 	mux.HandleFunc("/admin/openai-keys", h.AdminOpenAIKeys)

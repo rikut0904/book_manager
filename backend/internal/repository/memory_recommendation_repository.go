@@ -40,6 +40,19 @@ func (r *MemoryRecommendationRepository) List() []domain.Recommendation {
 	return items
 }
 
+func (r *MemoryRecommendationRepository) ListByUser(userID string) []domain.Recommendation {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	items := make([]domain.Recommendation, 0)
+	for i := len(r.ordered) - 1; i >= 0; i-- {
+		if item, ok := r.byID[r.ordered[i]]; ok && item.UserID == userID {
+			items = append(items, item)
+		}
+	}
+	return items
+}
+
 func (r *MemoryRecommendationRepository) Delete(id string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()

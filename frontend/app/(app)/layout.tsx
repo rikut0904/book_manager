@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 
 import { fetchJSON } from "@/lib/api";
 import { clearAuthState, getAuthState } from "@/lib/auth";
+import { UserProfileProvider, useUserProfile } from "@/lib/userProfile";
 
 const navItems = [
   { href: "/books", label: "ホーム" },
@@ -22,8 +23,6 @@ export default function AppLayout({
   const [isReady, setIsReady] = useState(false);
   const [isAuthed, setIsAuthed] = useState(false);
   const [accountId, setAccountId] = useState("");
-  const [userId, setUserId] = useState("");
-  const [displayName, setDisplayName] = useState("");
   const router = useRouter();
 
   useEffect(() => {
@@ -32,33 +31,6 @@ export default function AppLayout({
     setAccountId(auth?.userId ?? "");
     setIsReady(true);
   }, []);
-
-  useEffect(() => {
-    if (!accountId) {
-      return;
-    }
-    let isMounted = true;
-    fetchJSON<{ user: { userId: string; displayName: string } }>(`/users/${accountId}`, {
-      auth: true,
-    })
-      .then((data) => {
-        if (!isMounted) {
-          return;
-        }
-        setUserId(data.user?.userId ?? "");
-        setDisplayName(data.user?.displayName ?? "");
-      })
-      .catch(() => {
-        if (!isMounted) {
-          return;
-        }
-        setUserId("");
-        setDisplayName("");
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, [accountId]);
 
   const handleLogout = async () => {
     const auth = getAuthState();
@@ -118,7 +90,7 @@ export default function AppLayout({
               className="rounded-full bg-[#1b1c1f] px-5 py-3 text-sm font-medium text-white"
               href="/login"
             >
-              ログインする
+              ログイン
             </Link>
             <Link
               className="rounded-full border border-[#1b1c1f] px-5 py-3 text-sm font-medium text-[#1b1c1f]"
@@ -133,7 +105,30 @@ export default function AppLayout({
   }
 
   return (
-    <div className="min-h-screen">
+    <UserProfileProvider>
+      <AppLayoutInner accountId={accountId} onLogout={handleLogout}>
+        {children}
+      </AppLayoutInner>
+    </UserProfileProvider>
+  );
+}
+
+function AppLayoutInner({
+  children,
+  accountId,
+  onLogout,
+}: {
+  children: React.ReactNode;
+  accountId: string;
+  onLogout: () => void;
+}) {
+  const { profile } = useUserProfile();
+  const cachedDisplayName = getAuthState()?.displayName || "";
+  const userId = profile?.userId || accountId;
+  const displayName = profile?.displayName || cachedDisplayName;
+
+  return (
+    <div className="min-h-screen bg-[#f6f1e7] text-[#1b1c1f]">
       <header className="sticky top-0 z-10 border-b border-[#e4d8c7] bg-[#f6f1e7]/90 backdrop-blur">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
@@ -153,7 +148,7 @@ export default function AppLayout({
             <div className="flex items-center gap-2 text-sm">
               <div className="text-right">
                 <span className="block text-[#1b1c1f]">
-                  {displayName || userId || "user"}
+                  {displayName || "読み込み中..."}
                 </span>
               </div>
               <div className="h-9 w-9 rounded-full bg-[#1b1c1f] text-center text-sm leading-9 text-white">
@@ -163,7 +158,7 @@ export default function AppLayout({
             <button
               className="rounded-full border border-[#e4d8c7] px-3 py-2 text-xs text-[#5c5d63] hover:bg-white"
               type="button"
-              onClick={handleLogout}
+              onClick={onLogout}
             >
               ログアウト
             </button>
@@ -190,9 +185,7 @@ export default function AppLayout({
             </p>
           </div>
         </aside>
-        <main className="flex min-h-[70vh] flex-col gap-6">
-          {children}
-        </main>
+        <main className="flex min-h-[70vh] flex-col gap-6">{children}</main>
       </div>
     </div>
   );

@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"book_manager/backend/internal/admininvitations"
@@ -113,7 +114,19 @@ func (h *Handler) IsbnLookup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userID := userIDFromRequest(r)
-	settings := h.users.GetSettings(userID)
+	settings := domain.ProfileSettings{}
+	sharedKey := domain.OpenAIKey{}
+	hasShared := false
+	var settingsWG sync.WaitGroup
+	settingsWG.Add(2)
+	go func() {
+		defer settingsWG.Done()
+		settings = h.users.GetSettings(userID)
+	}()
+	go func() {
+		defer settingsWG.Done()
+		sharedKey, hasShared = h.openAIKeys.First()
+	}()
 
 	var book domain.Book
 	seriesGuess := isbn.SeriesGuess{}
@@ -168,7 +181,7 @@ func (h *Handler) IsbnLookup(w http.ResponseWriter, r *http.Request) {
 			book = created
 		}
 	}
-	sharedKey, hasShared := h.openAIKeys.First()
+	settingsWG.Wait()
 	apiKey := h.openAIAPIKey
 	if hasShared {
 		apiKey = sharedKey.APIKey
@@ -355,6 +368,214 @@ func (h *Handler) Books(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *Handler) BooksOverview(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	userID := userIDFromRequest(r)
+	var (
+		books     []domain.Book
+		userBooks []domain.UserBook
+		series    []domain.Series
+		favorites []domain.Favorite
+	)
+	var wg sync.WaitGroup
+	wg.Add(4)
+	go func() {
+		defer wg.Done()
+		books = h.books.List()
+	}()
+	go func() {
+		defer wg.Done()
+		userBooks = h.userBooks.ListByUser(userID)
+	}()
+	go func() {
+		defer wg.Done()
+		series = h.series.List()
+	}()
+	go func() {
+		defer wg.Done()
+		favorites = h.favorites.ListByUser(userID)
+	}()
+	wg.Wait()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"books":     books,
+		"userBooks": userBooks,
+		"series":    series,
+		"favorites": favorites,
+	})
+}
+
+func (h *Handler) BookDetailData(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	bookID := strings.TrimSpace(r.URL.Query().Get("bookId"))
+	if bookID == "" {
+		badRequest(w, "bookId is required")
+		return
+	}
+	book, ok := h.books.Get(bookID)
+	if !ok {
+		notFound(w)
+		return
+	}
+	userID := userIDFromRequest(r)
+	var (
+		userBooks []domain.UserBook
+		favorites []domain.Favorite
+	)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		userBooks = h.userBooks.ListByUser(userID)
+	}()
+	go func() {
+		defer wg.Done()
+		favorites = h.favorites.ListByUser(userID)
+	}()
+	wg.Wait()
+	var userBook *domain.UserBook
+	for i := range userBooks {
+		if userBooks[i].BookID == bookID {
+			userBook = &userBooks[i]
+			break
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"book":      book,
+		"userBook":  userBook,
+		"favorites": favorites,
+	})
+}
+
+func (h *Handler) BookEditData(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	bookID := strings.TrimSpace(r.URL.Query().Get("bookId"))
+	if bookID == "" {
+		badRequest(w, "bookId is required")
+		return
+	}
+	book, ok := h.books.Get(bookID)
+	if !ok {
+		notFound(w)
+		return
+	}
+	userID := userIDFromRequest(r)
+	var (
+		userBooks []domain.UserBook
+		series    []domain.Series
+	)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		userBooks = h.userBooks.ListByUser(userID)
+	}()
+	go func() {
+		defer wg.Done()
+		series = h.series.List()
+	}()
+	wg.Wait()
+	var userBook *domain.UserBook
+	for i := range userBooks {
+		if userBooks[i].BookID == bookID {
+			userBook = &userBooks[i]
+			break
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"book":     book,
+		"userBook": userBook,
+		"series":   series,
+	})
+}
+
+func (h *Handler) SeriesDetail(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	seriesID := strings.TrimSpace(r.URL.Query().Get("seriesId"))
+	if seriesID == "" {
+		badRequest(w, "seriesId is required")
+		return
+	}
+	userID := userIDFromRequest(r)
+	var (
+		userBooks []domain.UserBook
+		books     []domain.Book
+		series    []domain.Series
+		favorites []domain.Favorite
+	)
+	var wg sync.WaitGroup
+	wg.Add(4)
+	go func() {
+		defer wg.Done()
+		userBooks = h.userBooks.ListByUser(userID)
+	}()
+	go func() {
+		defer wg.Done()
+		books = h.books.List()
+	}()
+	go func() {
+		defer wg.Done()
+		series = h.series.List()
+	}()
+	go func() {
+		defer wg.Done()
+		favorites = h.favorites.ListByUser(userID)
+	}()
+	wg.Wait()
+	filtered := make([]domain.UserBook, 0, len(userBooks))
+	for _, item := range userBooks {
+		if item.SeriesID == seriesID {
+			filtered = append(filtered, item)
+		}
+	}
+	booksByID := make(map[string]domain.Book, len(books))
+	for _, book := range books {
+		booksByID[book.ID] = book
+	}
+	type seriesBookItem struct {
+		domain.UserBook
+		Book domain.Book `json:"book"`
+	}
+	items := make([]seriesBookItem, 0, len(filtered))
+	for _, item := range filtered {
+		book, ok := booksByID[item.BookID]
+		if !ok {
+			continue
+		}
+		items = append(items, seriesBookItem{
+			UserBook: item,
+			Book:     book,
+		})
+	}
+	seriesName := ""
+	for _, item := range series {
+		if item.ID == seriesID {
+			seriesName = item.Name
+			break
+		}
+	}
+	if seriesName == "" && len(items) > 0 {
+		seriesName = items[0].Book.SeriesName
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"seriesId":   seriesID,
+		"seriesName": seriesName,
+		"items":      items,
+		"favorites":  favorites,
+	})
+}
+
 func (h *Handler) BookByID(w http.ResponseWriter, r *http.Request) {
 	if _, ok := pathID("/books/", r.URL.Path); !ok {
 		notFound(w)
@@ -396,7 +617,23 @@ func (h *Handler) UserBooks(w http.ResponseWriter, r *http.Request) {
 		query := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("query")))
 		seriesID := strings.TrimSpace(r.URL.Query().Get("series"))
 		paging := pagination.ParseParams(r, config.DefaultPageSize)
-		items := h.userBooks.ListByUser(userID)
+		var items []domain.UserBook
+		var books []domain.Book
+		if query != "" {
+			var wg sync.WaitGroup
+			wg.Add(2)
+			go func() {
+				defer wg.Done()
+				items = h.userBooks.ListByUser(userID)
+			}()
+			go func() {
+				defer wg.Done()
+				books = h.books.List()
+			}()
+			wg.Wait()
+		} else {
+			items = h.userBooks.ListByUser(userID)
+		}
 		if bookID != "" {
 			filtered := items[:0]
 			for _, item := range items {
@@ -417,7 +654,7 @@ func (h *Handler) UserBooks(w http.ResponseWriter, r *http.Request) {
 		}
 		if query != "" {
 			booksByID := make(map[string]domain.Book)
-			for _, book := range h.books.List() {
+			for _, book := range books {
 				booksByID[book.ID] = book
 			}
 			filtered := items[:0]
@@ -950,6 +1187,81 @@ func (h *Handler) UsersByID(w http.ResponseWriter, r *http.Request) {
 			"following":   h.follows.CountFollowing(userID),
 		},
 		"recommendations": []string{},
+	})
+}
+
+func (h *Handler) UsersProfile(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	userID := userIDFromRequest(r)
+	if strings.TrimSpace(userID) == "" {
+		badRequest(w, "userId is required")
+		return
+	}
+	user, ok := h.users.Get(userID)
+	if !ok {
+		notFound(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"user": map[string]string{
+			"id":          user.ID,
+			"email":       user.Email,
+			"userId":      user.UserID,
+			"displayName": user.DisplayName,
+		},
+		"isAdmin": h.isAdminUser(user.ID),
+	})
+}
+
+func (h *Handler) UserDashboard(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	userID := userIDFromRequest(r)
+	if strings.TrimSpace(userID) == "" {
+		badRequest(w, "userId is required")
+		return
+	}
+	var (
+		favorites []domain.Favorite
+		recs      []domain.Recommendation
+		books     []domain.Book
+		series    []domain.Series
+		userBooks []domain.UserBook
+	)
+	var wg sync.WaitGroup
+	wg.Add(5)
+	go func() {
+		defer wg.Done()
+		favorites = h.favorites.ListByUser(userID)
+	}()
+	go func() {
+		defer wg.Done()
+		recs = h.recs.ListByUser(userID)
+	}()
+	go func() {
+		defer wg.Done()
+		books = h.books.List()
+	}()
+	go func() {
+		defer wg.Done()
+		series = h.series.List()
+	}()
+	go func() {
+		defer wg.Done()
+		userBooks = h.userBooks.ListByUser(userID)
+	}()
+	wg.Wait()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"favorites":       favorites,
+		"recommendations": recs,
+		"books":           books,
+		"series":          series,
+		"userBooks":       userBooks,
 	})
 }
 

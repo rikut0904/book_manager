@@ -13,6 +13,8 @@ type Config struct {
 	BookReportTo        string
 	IsbnCacheTTLMinutes int
 	DatabaseURL         string
+	AutoMigrate         bool
+	AuditLogEnabled     bool
 	SMTPHost            string
 	SMTPPort            string
 	SMTPUser            string
@@ -22,12 +24,12 @@ type Config struct {
 	OpenAIAPIKey        string
 	OpenAIDefaultModel  string
 	AdminUserIDs        string
-	FirebaseProjectID    string
-	FirebaseAPIKey       string
-	FirebaseClientEmail  string
-	FirebasePrivateKey   string
-	FrontendURL          string
-	TemplatesDir         string
+	FirebaseProjectID   string
+	FirebaseAPIKey      string
+	FirebaseClientEmail string
+	FirebasePrivateKey  string
+	FrontendURL         string
+	TemplatesDir        string
 }
 
 func Load() Config {
@@ -39,6 +41,8 @@ func Load() Config {
 		BookReportTo:        getEnv("BOOK_REPORT_TO", "product@rikut0904.site"),
 		IsbnCacheTTLMinutes: getEnvInt("ISBN_CACHE_TTL_MINUTES", 1440),
 		DatabaseURL:         getEnv("DATABASE_URL", ""),
+		AutoMigrate:         getEnvBool("AUTO_MIGRATE", true),
+		AuditLogEnabled:     getEnvBool("AUDIT_LOG_ENABLED", true),
 		SMTPHost:            getEnv("SMTP_HOST", ""),
 		SMTPPort:            getEnv("SMTP_PORT", "587"),
 		SMTPUser:            getEnv("SMTP_USER", ""),
@@ -48,12 +52,12 @@ func Load() Config {
 		OpenAIAPIKey:        getEnv("OPENAI_API_KEY", ""),
 		OpenAIDefaultModel:  getEnv("OPENAI_DEFAULT_MODEL", "gpt-4o-mini"),
 		AdminUserIDs:        getEnv("ADMIN_USER_IDS", ""),
-		FirebaseProjectID:    getEnv("FIREBASE_PROJECT_ID", ""),
-		FirebaseAPIKey:       getEnv("FIREBASE_API_KEY", ""),
-		FirebaseClientEmail:  getEnv("FIREBASE_CLIENT_EMAIL", ""),
-		FirebasePrivateKey:   getEnv("FIREBASE_PRIVATE_KEY", ""),
-		FrontendURL:          getEnv("FRONTEND_URL", "http://localhost:3000"),
-		TemplatesDir:         getEnv("TEMPLATES_DIR", "templates"),
+		FirebaseProjectID:   getEnv("FIREBASE_PROJECT_ID", ""),
+		FirebaseAPIKey:      getEnv("FIREBASE_API_KEY", ""),
+		FirebaseClientEmail: getEnv("FIREBASE_CLIENT_EMAIL", ""),
+		FirebasePrivateKey:  getEnv("FIREBASE_PRIVATE_KEY", ""),
+		FrontendURL:         getEnv("FRONTEND_URL", "http://localhost:3000"),
+		TemplatesDir:        getEnv("TEMPLATES_DIR", "templates"),
 	}
 }
 
@@ -69,6 +73,16 @@ func getEnvInt(key string, fallback int) int {
 func getEnv(key, fallback string) string {
 	if value, ok := os.LookupEnv(key); ok {
 		return value
+	}
+	return fallback
+}
+
+func getEnvBool(key string, fallback bool) bool {
+	if value, ok := os.LookupEnv(key); ok {
+		parsed, err := strconv.ParseBool(value)
+		if err == nil {
+			return parsed
+		}
 	}
 	return fallback
 }

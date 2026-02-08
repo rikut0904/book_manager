@@ -47,63 +47,25 @@ export default function SeriesBookDetailPage() {
       return;
     }
     let isMounted = true;
-    fetchJSON<Book>(`/books/${bookId}`, { auth: true })
+    fetchJSON<{
+      book: Book;
+      userBook: UserBook | null;
+      favorites: Favorite[];
+    }>(`/books/detail?bookId=${encodeURIComponent(bookId)}`, { auth: true })
       .then((data) => {
         if (!isMounted) {
           return;
         }
-        setBook(data);
+        setBook(data.book ?? null);
+        setFavorites(data.favorites ?? []);
+        setUserBook(data.userBook ?? null);
       })
       .catch(() => {
         if (!isMounted) {
           return;
         }
         setError("書籍詳細を取得できませんでした。");
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, [bookId]);
-
-  useEffect(() => {
-    let isMounted = true;
-    fetchJSON<{ items: Favorite[] }>("/favorites", { auth: true })
-      .then((data) => {
-        if (!isMounted) {
-          return;
-        }
-        setFavorites(data.items ?? []);
-      })
-      .catch(() => {
-        if (!isMounted) {
-          return;
-        }
         setFavorites([]);
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!bookId) {
-      return;
-    }
-    let isMounted = true;
-    fetchJSON<{ items: UserBook[] }>(
-      `/user-books?bookId=${encodeURIComponent(bookId)}`,
-      { auth: true }
-    )
-      .then((data) => {
-        if (!isMounted) {
-          return;
-        }
-        setUserBook(data.items?.[0] ?? null);
-      })
-      .catch(() => {
-        if (!isMounted) {
-          return;
-        }
         setUserBook(null);
       });
     return () => {

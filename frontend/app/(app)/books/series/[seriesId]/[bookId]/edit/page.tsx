@@ -23,11 +23,14 @@ export default function SeriesBookEditPage() {
     if (!bookId) {
       return;
     }
-    const data = await fetchJSON<{ items: UserBook[] }>(
-      `/user-books?bookId=${encodeURIComponent(bookId)}`,
-      { auth: true }
-    );
-    setUserBook(data.items?.[0] ?? null);
+    const data = await fetchJSON<{
+      book: Book;
+      userBook: UserBook | null;
+      series: Series[];
+    }>(`/books/edit-data?bookId=${encodeURIComponent(bookId)}`, { auth: true });
+    setBook(data.book ?? null);
+    setSeriesList(data.series ?? []);
+    setUserBook(data.userBook ?? null);
   };
 
   useEffect(() => {
@@ -36,22 +39,17 @@ export default function SeriesBookEditPage() {
     }
     let isMounted = true;
     const load = async () => {
-      const [bookRes, seriesRes, userBooksRes] = await Promise.all([
-        fetchJSON<Book>(`/books/${bookId}`, { auth: true }).catch(() => null),
-        fetchJSON<{ items: Series[] }>("/series", { auth: true }).catch(() => ({
-          items: [],
-        })),
-        fetchJSON<{ items: UserBook[] }>(
-          `/user-books?bookId=${encodeURIComponent(bookId)}`,
-          { auth: true }
-        ).catch(() => ({ items: [] })),
-      ]);
+      const data = await fetchJSON<{
+        book: Book;
+        userBook: UserBook | null;
+        series: Series[];
+      }>(`/books/edit-data?bookId=${encodeURIComponent(bookId)}`, { auth: true });
       if (!isMounted) {
         return;
       }
-      setBook(bookRes);
-      setSeriesList(seriesRes.items ?? []);
-      setUserBook(userBooksRes.items?.[0] ?? null);
+      setBook(data.book ?? null);
+      setSeriesList(data.series ?? []);
+      setUserBook(data.userBook ?? null);
     };
     load();
     return () => {

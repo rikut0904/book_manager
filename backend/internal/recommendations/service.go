@@ -36,6 +36,10 @@ func (s *Service) List() []domain.Recommendation {
 	return s.repo.List()
 }
 
+func (s *Service) ListByUser(userID string) []domain.Recommendation {
+	return s.repo.ListByUser(userID)
+}
+
 func (s *Service) Delete(id string) bool {
 	return s.repo.Delete(id)
 }

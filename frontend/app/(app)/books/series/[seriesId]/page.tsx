@@ -52,40 +52,18 @@ export default function SeriesDetailPage() {
       setIsLoading(true);
       setError(null);
       try {
-        const [userBooksRes, favoritesRes] = await Promise.all([
-          fetchJSON<{ items: UserBook[] }>(
-            `/user-books?series=${encodeURIComponent(params.seriesId)}`,
-            { auth: true }
-          ).catch(() => ({ items: [] })),
-          fetchJSON<{ items: Favorite[] }>("/favorites", { auth: true }).catch(
-            () => ({ items: [] })
-          ),
-        ]);
-        const items = userBooksRes.items ?? [];
-        const bookResults = await Promise.all(
-          items.map((item) =>
-            fetchJSON<Book>(`/books/${item.bookId}`, { auth: true }).catch(
-              () => null
-            )
-          )
-        );
+        const data = await fetchJSON<{
+          seriesId: string;
+          seriesName: string;
+          items: SeriesBookItem[];
+          favorites: Favorite[];
+        }>(`/series/detail?seriesId=${encodeURIComponent(params.seriesId)}`, {
+          auth: true,
+        });
         if (!isMounted) {
           return;
         }
-        const booksById = new Map(
-          bookResults
-            .filter((book): book is Book => Boolean(book))
-            .map((book) => [book.id, book])
-        );
-        const mapped = items
-          .map((item) => {
-            const book = booksById.get(item.bookId);
-            if (!book) {
-              return null;
-            }
-            return { ...item, book };
-          })
-          .filter((item): item is SeriesBookItem => Boolean(item))
+        const mapped = (data.items ?? [])
           .sort((a, b) => {
             const aVolume = a.volumeNumber || Number.MAX_SAFE_INTEGER;
             const bVolume = b.volumeNumber || Number.MAX_SAFE_INTEGER;
@@ -94,10 +72,9 @@ export default function SeriesDetailPage() {
             }
             return (a.book?.title || "").localeCompare(b.book?.title || "", "ja");
           });
-        const firstBook = mapped[0]?.book;
-        setSeriesName(firstBook?.seriesName || "未判定");
+        setSeriesName(data.seriesName || "未判定");
         setSeriesBooks(mapped);
-        setFavorites(favoritesRes.items ?? []);
+        setFavorites(data.favorites ?? []);
       } catch {
         if (!isMounted) {
           return;

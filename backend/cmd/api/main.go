@@ -63,22 +63,24 @@ func main() {
 		if err != nil {
 			log.Fatalf("db connection error: %v", err)
 		}
-		if err := dbConn.AutoMigrate(
-			&gormrepo.User{},
-			&gormrepo.ProfileSettings{},
-			&gormrepo.Book{},
-			&gormrepo.UserBook{},
-			&gormrepo.Favorite{},
-			&gormrepo.NextToBuyManual{},
-			&gormrepo.Recommendation{},
-			&gormrepo.IsbnCache{},
-			&gormrepo.AuditLog{},
-			&gormrepo.Series{},
-			&gormrepo.OpenAIKey{},
-			&gormrepo.AdminInvitation{},
-			&gormrepo.AdminUser{},
-		); err != nil {
-			log.Fatalf("db migrate error: %v", err)
+		if cfg.AutoMigrate {
+			if err := dbConn.AutoMigrate(
+				&gormrepo.User{},
+				&gormrepo.ProfileSettings{},
+				&gormrepo.Book{},
+				&gormrepo.UserBook{},
+				&gormrepo.Favorite{},
+				&gormrepo.NextToBuyManual{},
+				&gormrepo.Recommendation{},
+				&gormrepo.IsbnCache{},
+				&gormrepo.AuditLog{},
+				&gormrepo.Series{},
+				&gormrepo.OpenAIKey{},
+				&gormrepo.AdminInvitation{},
+				&gormrepo.AdminUser{},
+			); err != nil {
+				log.Fatalf("db migrate error: %v", err)
+			}
 		}
 		userRepo = gormrepo.NewUserRepository(dbConn)
 		bookRepo = gormrepo.NewBookRepository(dbConn)
@@ -188,6 +190,9 @@ func main() {
 		cfg.OpenAIDefaultModel,
 		aiPrompt,
 	)
+	if !cfg.AuditLogEnabled {
+		auditLogRepo = nil
+	}
 	r := router.New(h, auditLogRepo, cfg.CORSAllowedOrigins, firebaseMiddleware.Wrap)
 
 	server := &http.Server{

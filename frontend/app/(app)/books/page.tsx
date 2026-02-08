@@ -61,23 +61,9 @@ export default function BooksPage() {
         let data = cachedBooksPageData;
         if (!data) {
           if (!cachedBooksPagePromise) {
-            cachedBooksPagePromise = Promise.all([
-              fetchJSON<{ items: Book[] }>("/books", { auth: true }),
-              fetchJSON<{ items: UserBook[] }>("/user-books", { auth: true }).catch(
-                () => ({ items: [] })
-              ),
-              fetchJSON<{ items: Series[] }>("/series", { auth: true }).catch(
-                () => ({ items: [] })
-              ),
-              fetchJSON<{ items: Favorite[] }>("/favorites", { auth: true }).catch(
-                () => ({ items: [] })
-              ),
-            ]).then(([booksRes, userBooksRes, seriesRes, favoritesRes]) => ({
-              books: booksRes.items ?? [],
-              userBooks: userBooksRes.items ?? [],
-              series: seriesRes.items ?? [],
-              favorites: favoritesRes.items ?? [],
-            }));
+            cachedBooksPagePromise = fetchJSON<BooksPageData>("/books/overview", {
+              auth: true,
+            });
           }
           data = await cachedBooksPagePromise;
           cachedBooksPageData = data;
