@@ -24,6 +24,7 @@ type ProfileSettings struct {
 
 type Book struct {
 	ID            string  `gorm:"primaryKey"`
+	UserID        string  `gorm:"index"`
 	ISBN13        *string `gorm:"uniqueIndex"`
 	Title         string
 	OriginalTitle string
@@ -99,5 +100,24 @@ type AuditLog struct {
 	Payload   datatypes.JSON `gorm:"type:jsonb"`
 	IP        string
 	UserAgent string
+	CreatedAt time.Time `gorm:"index"`
+}
+
+type AdminInvitation struct {
+	ID        string     `gorm:"primaryKey"`
+	Token     string     `gorm:"uniqueIndex"`
+	Email     string     `gorm:"index"`
+	UserID    string     `gorm:"uniqueIndex"`
+	CreatedBy string     `gorm:"index"`
+	ExpiresAt time.Time  `gorm:"index"`
+	UsedAt    *time.Time
+	UsedBy    string
+	CreatedAt time.Time `gorm:"index"`
+}
+
+type AdminUser struct {
+	ID        string    `gorm:"primaryKey"`
+	UserID    string    `gorm:"uniqueIndex"`
+	CreatedBy string    `gorm:"index"`
 	CreatedAt time.Time `gorm:"index"`
 }

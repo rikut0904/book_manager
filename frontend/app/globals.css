@@ -1,6 +1,8 @@
 @import "tailwindcss";
 
 :root {
+  --font-body: "Noto Sans JP", sans-serif;
+  --font-display: "Shippori Mincho", serif;
   --paper: #f6f1e7;
   --paper-strong: #efe5d4;
   --ink: #1b1c1f;

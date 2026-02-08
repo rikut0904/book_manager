@@ -22,11 +22,14 @@ export default function BookEditPage() {
     if (!params?.id) {
       return;
     }
-    const data = await fetchJSON<{ items: UserBook[] }>(
-      `/user-books?bookId=${encodeURIComponent(params.id)}`,
-      { auth: true }
-    );
-    const item = data.items?.[0] ?? null;
+    const data = await fetchJSON<{
+      book: Book;
+      userBook: UserBook | null;
+      series: Series[];
+    }>(`/books/edit-data?bookId=${encodeURIComponent(params.id)}`, { auth: true });
+    const item = data.userBook ?? null;
+    setBook(data.book ?? null);
+    setSeriesList(data.series ?? []);
     if (item?.seriesId) {
       router.replace(`/books/series/${item.seriesId}/${params.id}/edit`);
       return;
@@ -40,22 +43,17 @@ export default function BookEditPage() {
     }
     let isMounted = true;
     const load = async () => {
-      const [bookRes, seriesRes, userBooksRes] = await Promise.all([
-        fetchJSON<Book>(`/books/${params.id}`, { auth: true }).catch(() => null),
-        fetchJSON<{ items: Series[] }>("/series", { auth: true }).catch(() => ({
-          items: [],
-        })),
-        fetchJSON<{ items: UserBook[] }>(
-          `/user-books?bookId=${encodeURIComponent(params.id)}`,
-          { auth: true }
-        ).catch(() => ({ items: [] })),
-      ]);
+      const data = await fetchJSON<{
+        book: Book;
+        userBook: UserBook | null;
+        series: Series[];
+      }>(`/books/edit-data?bookId=${encodeURIComponent(params.id)}`, { auth: true });
       if (!isMounted) {
         return;
       }
-      setBook(bookRes);
-      setSeriesList(seriesRes.items ?? []);
-      const item = userBooksRes.items?.[0] ?? null;
+      setBook(data.book ?? null);
+      setSeriesList(data.series ?? []);
+      const item = data.userBook ?? null;
       if (item?.seriesId) {
         router.replace(`/books/series/${item.seriesId}/${params.id}/edit`);
         return;

@@ -1,0 +1,12 @@
+ISBN: {{.ISBN13}}
+Title: {{.Title}}
+Authors: {{.Authors}}
+Publisher: {{.Publisher}}
+PublishedDate: {{.PublishedDate}}
+Thumbnail: {{.ThumbnailURL}}
+
+Suggestion:
+{{.Suggestion}}
+
+Note:
+{{.Note}}

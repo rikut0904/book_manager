@@ -6,9 +6,11 @@ import { useEffect, useState } from "react";
 import { fetchJSON } from "@/lib/api";
 import { getAuthState } from "@/lib/auth";
 import { commonErrorMessages } from "@/lib/errorMessages";
+import { useUserProfile } from "@/lib/userProfile";
 
 type UserResponse = {
   user: { id: string; email: string; userId: string; displayName: string };
+  isAdmin?: boolean;
 };
 
 type Favorite = {
@@ -43,11 +45,18 @@ type Recommendation = {
   createdAt: string;
 };
 
+type DashboardResponse = {
+  favorites: Favorite[];
+  recommendations: Recommendation[];
+  books: Book[];
+  series: Series[];
+  userBooks: UserBook[];
+};
+
 const errorMessages = commonErrorMessages;
 
 export default function UserPage() {
-  const [profile, setProfile] = useState<UserResponse["user"] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { profile, error: profileError, refresh } = useUserProfile();
   const [bookmarks, setBookmarks] = useState<Favorite[]>([]);
   const [bookmarkError, setBookmarkError] = useState<string | null>(null);
   const [recs, setRecs] = useState<Recommendation[]>([]);
@@ -59,6 +68,17 @@ export default function UserPage() {
   const [editForm, setEditForm] = useState({ displayName: "", email: "" });
   const [editError, setEditError] = useState<string | null>(null);
   const [editMessage, setEditMessage] = useState<string | null>(null);
+  const initialUserId = getAuthState()?.userId ?? "";
+
+  useEffect(() => {
+    if (!profile) {
+      return;
+    }
+    setEditForm({
+      displayName: profile.displayName ?? "",
+      email: profile.email ?? "",
+    });
+  }, [profile]);
 
   useEffect(() => {
     const auth = getAuthState();
@@ -66,130 +86,25 @@ export default function UserPage() {
       return;
     }
     let isMounted = true;
-    fetchJSON<UserResponse>(`/users/${auth.userId}`, { auth: true })
+    fetchJSON<DashboardResponse>("/user/dashboard", { auth: true })
       .then((data) => {
         if (!isMounted) {
           return;
         }
-        setProfile(data.user ?? null);
-        setEditForm({
-          displayName: data.user?.displayName ?? "",
-          email: data.user?.email ?? "",
-        });
-      })
-      .catch(() => {
-        if (!isMounted) {
-          return;
-        }
-        setError("ユーザー情報を取得できませんでした。");
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    const auth = getAuthState();
-    if (!auth?.userId) {
-      return;
-    }
-    let isMounted = true;
-    fetchJSON<{ items: Favorite[] }>("/favorites", { auth: true })
-      .then((data) => {
-        if (!isMounted) {
-          return;
-        }
-        setBookmarks(data.items ?? []);
+        setBookmarks(data.favorites ?? []);
+        setRecs(data.recommendations ?? []);
+        setBooks(data.books ?? []);
+        setSeries(data.series ?? []);
+        setUserBooks(data.userBooks ?? []);
       })
       .catch(() => {
         if (!isMounted) {
           return;
         }
         setBookmarkError("ブックマークを取得できませんでした。");
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    const auth = getAuthState();
-    if (!auth?.userId) {
-      return;
-    }
-    let isMounted = true;
-    fetchJSON<{ items: Recommendation[] }>("/recommendations", { auth: true })
-      .then((data) => {
-        if (!isMounted) {
-          return;
-        }
-        const own = (data.items ?? []).filter((item) => item.userId === auth.userId);
-        setRecs(own);
-      })
-      .catch(() => {
-        if (!isMounted) {
-          return;
-        }
-        setRecError("Suggestを取得できませんでした。");
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let isMounted = true;
-    fetchJSON<{ items: Book[] }>("/books", { auth: true })
-      .then((data) => {
-        if (!isMounted) {
-          return;
-        }
-        setBooks(data.items ?? []);
-      })
-      .catch(() => {
-        if (!isMounted) {
-          return;
-        }
+        setRecError("おすすめした本を取得できませんでした。");
         setBooks([]);
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let isMounted = true;
-    fetchJSON<{ items: Series[] }>("/series", { auth: true })
-      .then((data) => {
-        if (!isMounted) {
-          return;
-        }
-        setSeries(data.items ?? []);
-      })
-      .catch(() => {
-        if (!isMounted) {
-          return;
-        }
         setSeries([]);
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let isMounted = true;
-    fetchJSON<{ items: UserBook[] }>("/user-books", { auth: true })
-      .then((data) => {
-        if (!isMounted) {
-          return;
-        }
-        setUserBooks(data.items ?? []);
-      })
-      .catch(() => {
-        if (!isMounted) {
-          return;
-        }
         setUserBooks([]);
       });
     return () => {
@@ -238,7 +153,11 @@ export default function UserPage() {
           email: editForm.email,
         }),
       });
-      setProfile(data.user ?? null);
+      setEditForm({
+        displayName: data.user?.displayName ?? "",
+        email: data.user?.email ?? "",
+      });
+      await refresh();
       setEditMessage("更新しました。");
     } catch (err) {
       const message = err instanceof Error ? err.message.trim() : "";
@@ -255,12 +174,8 @@ export default function UserPage() {
               User
             </p>
             <h1 className="mt-2 font-[var(--font-display)] text-3xl">
-              @{profile?.userId || "user"}
+              @{profile?.userId || initialUserId || "読み込み中..."}
             </h1>
-            <div className="mt-2 text-sm text-[#5c5d63]">
-              <p>{profile?.displayName || "ユーザー名未設定"}</p>
-              <p>{profile?.email || "メール未設定"}</p>
-            </div>
           </div>
           <Link
             className="flex h-10 w-10 items-center justify-center rounded-full border border-[#e4d8c7] text-[#5c5d63] hover:bg-white"
@@ -298,10 +213,10 @@ export default function UserPage() {
             編集
           </button>
         </div>
-        {error ? (
-          <p className="mt-3 text-sm text-red-600">{error}</p>
+        {profileError ? (
+          <p className="mt-3 text-sm text-red-600">{profileError}</p>
         ) : null}
-        {!error && !profile ? (
+        {!profileError && !profile ? (
           <p className="mt-3 text-sm text-[#5c5d63]">
             情報を取得しています...
           </p>
@@ -367,7 +282,7 @@ export default function UserPage() {
         </div>
         <div className="rounded-3xl border border-[#e4d8c7] bg-white/70 p-6 shadow-sm">
           <div className="flex items-start justify-between gap-3">
-            <h2 className="font-[var(--font-display)] text-2xl">Suggest</h2>
+            <h2 className="font-[var(--font-display)] text-2xl">おすすめした本</h2>
             <Link
               className="text-xs text-[#c86b3c] hover:text-[#8f3d1f]"
               href="/user/suggest"
@@ -380,7 +295,7 @@ export default function UserPage() {
           ) : null}
           {!recError && recs.length === 0 ? (
             <p className="mt-3 text-sm text-[#5c5d63]">
-              まだSuggestがありません。
+              まだおすすめした本がありません。
             </p>
           ) : null}
           <div className="mt-4 grid gap-3">
@@ -389,7 +304,7 @@ export default function UserPage() {
                 key={item.id}
                 className="rounded-2xl border border-[#e4d8c7] bg-white px-4 py-3 text-sm"
               >
-                <p className="text-xs text-[#5c5d63]">Suggest</p>
+                <p className="text-xs text-[#5c5d63]">おすすめした本</p>
                 <p className="mt-1 text-[#1b1c1f]">
                   {getBookTitleWithVolume(item.bookId)}
                 </p>

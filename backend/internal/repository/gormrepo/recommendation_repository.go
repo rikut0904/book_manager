@@ -46,6 +46,24 @@ func (r *RecommendationRepository) List() []domain.Recommendation {
 	return items
 }
 
+func (r *RecommendationRepository) ListByUser(userID string) []domain.Recommendation {
+	var models []Recommendation
+	if err := r.db.Where("user_id = ?", userID).Order("created_at desc").Find(&models).Error; err != nil {
+		return nil
+	}
+	items := make([]domain.Recommendation, 0, len(models))
+	for _, model := range models {
+		items = append(items, domain.Recommendation{
+			ID:        model.ID,
+			UserID:    model.UserID,
+			BookID:    model.BookID,
+			Comment:   model.Comment,
+			CreatedAt: model.CreatedAt,
+		})
+	}
+	return items
+}
+
 func (r *RecommendationRepository) Delete(id string) bool {
 	if err := r.db.Delete(&Recommendation{}, "id = ?", id).Error; err != nil {
 		return false

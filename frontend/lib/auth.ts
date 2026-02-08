@@ -2,6 +2,7 @@ export type AuthState = {
   accessToken: string;
   refreshToken: string;
   userId: string;
+  displayName?: string;
 };
 
 const STORAGE_KEY = "book_manager_auth";
@@ -26,6 +27,27 @@ export function setAuthState(state: AuthState) {
     return;
   }
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  window.dispatchEvent(new Event("auth-changed"));
+}
+
+export function updateAuthState(patch: Partial<AuthState>) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const current = getAuthState();
+  if (!current) {
+    return;
+  }
+  const next = { ...current, ...patch };
+  if (
+    next.accessToken === current.accessToken &&
+    next.refreshToken === current.refreshToken &&
+    next.userId === current.userId &&
+    next.displayName === current.displayName
+  ) {
+    return;
+  }
+  setAuthState(next);
 }
 
 export function clearAuthState() {
@@ -33,4 +55,5 @@ export function clearAuthState() {
     return;
   }
   window.localStorage.removeItem(STORAGE_KEY);
+  window.dispatchEvent(new Event("auth-changed"));
 }

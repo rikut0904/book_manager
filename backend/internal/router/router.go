@@ -11,6 +11,7 @@ func New(
 	h *handler.Handler,
 	auditRepo repository.AuditLogRepository,
 	allowedOrigins string,
+	authMiddleware func(http.Handler) http.Handler,
 ) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", h.Health)
@@ -19,10 +20,16 @@ func New(
 	mux.HandleFunc("/auth/login", h.AuthLogin)
 	mux.HandleFunc("/auth/refresh", h.AuthRefresh)
 	mux.HandleFunc("/auth/logout", h.AuthLogout)
+	mux.HandleFunc("/auth/resend-verify", h.AuthResendVerify)
+	mux.HandleFunc("/auth/email", h.AuthUpdateEmail)
+	mux.HandleFunc("/auth/status", h.AuthStatus)
 
 	mux.HandleFunc("/isbn/lookup", h.IsbnLookup)
 
 	mux.HandleFunc("/books", h.Books)
+	mux.HandleFunc("/books/overview", h.BooksOverview)
+	mux.HandleFunc("/books/detail", h.BookDetailData)
+	mux.HandleFunc("/books/edit-data", h.BookEditData)
 	mux.HandleFunc("/books/", h.BookByID)
 
 	mux.HandleFunc("/user-books", h.UserBooks)
@@ -36,26 +43,37 @@ func New(
 	mux.HandleFunc("/next-to-buy/manual", h.NextToBuyManual)
 	mux.HandleFunc("/next-to-buy/manual/", h.NextToBuyManualByID)
 
-
 	mux.HandleFunc("/recommendations", h.Recommendations)
 	mux.HandleFunc("/recommendations/", h.RecommendationsByID)
 
 	mux.HandleFunc("/users", h.Users)
 	mux.HandleFunc("/users/", h.UsersByID)
+	mux.HandleFunc("/users/profile", h.UsersProfile)
 	mux.HandleFunc("/users/me", h.UsersMe)
 	mux.HandleFunc("/users/me/settings", h.UsersMeSettings)
+	mux.HandleFunc("/user/dashboard", h.UserDashboard)
 
 	mux.HandleFunc("/follows/", h.Follows)
 
 	mux.HandleFunc("/book-reports", h.BookReports)
 
 	mux.HandleFunc("/series", h.Series)
+	mux.HandleFunc("/series/detail", h.SeriesDetail)
 	mux.HandleFunc("/series/", h.SeriesByID)
 
 	mux.HandleFunc("/admin/openai-keys", h.AdminOpenAIKeys)
 	mux.HandleFunc("/admin/openai-keys/", h.AdminOpenAIKeysByID)
 	mux.HandleFunc("/admin/openai-models", h.AdminOpenAIModels)
+	mux.HandleFunc("/admin/users", h.AdminUsers)
+	mux.HandleFunc("/admin/users/", h.AdminUsersByID)
+	mux.HandleFunc("/admin/invitations", h.AdminInvitations)
+	mux.HandleFunc("/admin/invitations/", h.AdminInvitationsByID)
+
+	mux.HandleFunc("/auth/signup/admin", h.AuthSignupAdmin)
 
 	handlerWithAudit := AuditMiddleware(auditRepo, mux)
+	if authMiddleware != nil {
+		handlerWithAudit = authMiddleware(handlerWithAudit)
+	}
 	return CORSMiddleware(allowedOrigins, handlerWithAudit)
 }

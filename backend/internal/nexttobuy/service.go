@@ -1,10 +1,8 @@
 package nexttobuy
 
 import (
-	"crypto/rand"
-	"encoding/base64"
-
 	"book_manager/backend/internal/domain"
+	"book_manager/backend/internal/idgen"
 	"book_manager/backend/internal/repository"
 )
 
@@ -27,7 +25,7 @@ func NewService(repo repository.NextToBuyRepository) *Service {
 
 func (s *Service) Create(userID, title, seriesName string, volumeNumber int, note string) (domain.NextToBuyManual, error) {
 	item := domain.NextToBuyManual{
-		ID:           newID(),
+		ID:           idgen.NewNextToBuy(),
 		UserID:       userID,
 		Title:        title,
 		SeriesName:   seriesName,
@@ -69,12 +67,4 @@ func (s *Service) Update(id string, input UpdateInput) (domain.NextToBuyManual, 
 
 func (s *Service) Delete(id string) bool {
 	return s.repo.Delete(id)
-}
-
-func newID() string {
-	seed := make([]byte, 16)
-	if _, err := rand.Read(seed); err != nil {
-		return "next_to_buy_demo"
-	}
-	return base64.RawURLEncoding.EncodeToString(seed)
 }

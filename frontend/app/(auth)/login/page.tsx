@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { fetchJSON } from "@/lib/api";
-import { setAuthState } from "@/lib/auth";
+import { setAuthState, updateAuthState } from "@/lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -22,6 +22,7 @@ export default function LoginPage() {
         accessToken: string;
         refreshToken: string;
         user: { id: string };
+        emailVerified: boolean;
       }>("/auth/login", {
         method: "POST",
         body: JSON.stringify(form),
@@ -31,7 +32,22 @@ export default function LoginPage() {
         refreshToken: data.refreshToken,
         userId: data.user.id,
       });
-      router.push("/books");
+      try {
+        const profile = await fetchJSON<{ user: { displayName: string } }>(
+          "/users/profile",
+          { auth: true }
+        );
+        if (profile.user?.displayName) {
+          updateAuthState({ displayName: profile.user.displayName });
+        }
+      } catch {
+        // ignore profile fetch errors
+      }
+      if (data.emailVerified) {
+        router.push("/books");
+      } else {
+        router.push("/verify-email");
+      }
     } catch {
       setError("ログインに失敗しました。");
     } finally {

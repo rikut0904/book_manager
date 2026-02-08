@@ -26,6 +26,7 @@ func (r *BookRepository) Create(book domain.Book) error {
 	}
 	model := Book{
 		ID:            book.ID,
+		UserID:        book.UserID,
 		ISBN13:        isbnPtr,
 		Title:         book.Title,
 		OriginalTitle: book.OriginalTitle,
@@ -73,6 +74,33 @@ func (r *BookRepository) List() []domain.Book {
 	return items
 }
 
+func (r *BookRepository) ListByUser(userID string) []domain.Book {
+	var models []Book
+	if err := r.db.Where("user_id = ?", userID).Order("id asc").Find(&models).Error; err != nil {
+		return nil
+	}
+	items := make([]domain.Book, 0, len(models))
+	for _, model := range models {
+		items = append(items, modelToDomainBook(model))
+	}
+	return items
+}
+
+func (r *BookRepository) ListByIDs(ids []string) []domain.Book {
+	if len(ids) == 0 {
+		return []domain.Book{}
+	}
+	var models []Book
+	if err := r.db.Where("id IN ?", ids).Order("id asc").Find(&models).Error; err != nil {
+		return nil
+	}
+	items := make([]domain.Book, 0, len(models))
+	for _, model := range models {
+		items = append(items, modelToDomainBook(model))
+	}
+	return items
+}
+
 func (r *BookRepository) Delete(id string) bool {
 	result := r.db.Delete(&Book{}, "id = ?", id)
 	if result.Error != nil {
@@ -92,6 +120,7 @@ func (r *BookRepository) Update(book domain.Book) bool {
 	}
 	model := Book{
 		ID:            book.ID,
+		UserID:        book.UserID,
 		ISBN13:        isbnPtr,
 		Title:         book.Title,
 		OriginalTitle: book.OriginalTitle,
@@ -115,6 +144,7 @@ func modelToDomainBook(model Book) domain.Book {
 	}
 	return domain.Book{
 		ID:            model.ID,
+		UserID:        model.UserID,
 		ISBN13:        isbn,
 		Title:         model.Title,
 		OriginalTitle: model.OriginalTitle,

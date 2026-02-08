@@ -1,11 +1,10 @@
 package books
 
 import (
-	"crypto/rand"
-	"encoding/base64"
 	"errors"
 
 	"book_manager/backend/internal/domain"
+	"book_manager/backend/internal/idgen"
 	"book_manager/backend/internal/repository"
 )
 
@@ -23,7 +22,7 @@ func NewService(books repository.BookRepository) *Service {
 
 func (s *Service) Create(input domain.Book) (domain.Book, error) {
 	book := input
-	book.ID = newID()
+	book.ID = idgen.NewBook()
 	if book.Source == "" {
 		book.Source = "manual"
 	}
@@ -40,6 +39,14 @@ func (s *Service) List() []domain.Book {
 	return s.books.List()
 }
 
+func (s *Service) ListByUser(userID string) []domain.Book {
+	return s.books.ListByUser(userID)
+}
+
+func (s *Service) ListByIDs(ids []string) []domain.Book {
+	return s.books.ListByIDs(ids)
+}
+
 func (s *Service) Get(id string) (domain.Book, bool) {
 	return s.books.FindByID(id)
 }
@@ -54,12 +61,4 @@ func (s *Service) Delete(id string) bool {
 
 func (s *Service) Update(book domain.Book) bool {
 	return s.books.Update(book)
-}
-
-func newID() string {
-	seed := make([]byte, 16)
-	if _, err := rand.Read(seed); err != nil {
-		return "book_demo"
-	}
-	return base64.RawURLEncoding.EncodeToString(seed)
 }
