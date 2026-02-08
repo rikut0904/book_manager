@@ -24,6 +24,7 @@ type ProfileSettings struct {
 
 type Book struct {
 	ID            string  `gorm:"primaryKey"`
+	UserID        string  `gorm:"index"`
 	ISBN13        *string `gorm:"uniqueIndex"`
 	Title         string
 	OriginalTitle string

@@ -1,16 +1,4 @@
 services:
-  db:
-    image: postgres:16
-    container_name: book_manager_db
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: book_manager
-    ports:
-      - "5432:5432"
-    volumes:
-      - db_data:/var/lib/postgresql/data
-
   backend:
     build:
       context: ./backend
@@ -18,10 +6,6 @@ services:
     container_name: book_manager_backend
     env_file:
       - ./backend/.env
-    environment:
-      DATABASE_URL: postgres://postgres:postgres@db:5432/book_manager?sslmode=disable
-    depends_on:
-      - db
     ports:
       - "8080:8080"
     volumes:
@@ -45,5 +29,4 @@ services:
       - /app/.next
 
 volumes:
-  db_data:
   go_mod_cache:

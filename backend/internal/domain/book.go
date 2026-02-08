@@ -2,6 +2,7 @@ package domain
 
 type Book struct {
 	ID            string   `json:"id"`
+	UserID        string   `json:"userId"`
 	ISBN13        string   `json:"isbn13"`
 	Title         string   `json:"title"`
 	OriginalTitle string   `json:"originalTitle"`

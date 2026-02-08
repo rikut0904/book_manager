@@ -138,6 +138,7 @@ func (h *Handler) IsbnLookup(w http.ResponseWriter, r *http.Request) {
 			book.Title = cleaned
 		}
 		seriesGuess = guess
+		book.UserID = userID
 		created, err := h.books.Create(book)
 		if err != nil {
 			if existing, ok := h.books.FindByISBN(isbnValue); ok {
@@ -221,35 +222,34 @@ func (h *Handler) IsbnLookup(w http.ResponseWriter, r *http.Request) {
 		book.SeriesName = seriesGuess.Name
 		_ = h.books.Update(book)
 	}
-	if seriesID != "" || seriesGuess.VolumeNumber > 0 {
-		userItems := h.userBooks.ListByUser(userID)
-		var userBookID string
-		for _, item := range userItems {
-			if item.BookID == book.ID {
-				userBookID = item.ID
-				break
-			}
+	// ユーザーの蔵書に追加（既存なら取得）
+	userItems := h.userBooks.ListByUser(userID)
+	var userBookID string
+	for _, item := range userItems {
+		if item.BookID == book.ID {
+			userBookID = item.ID
+			break
 		}
-		if userBookID == "" {
-			if created, err := h.userBooks.Create(userID, book.ID, "", ""); err == nil {
-				userBookID = created.ID
-			}
+	}
+	if userBookID == "" {
+		if created, err := h.userBooks.Create(userID, book.ID, "", ""); err == nil {
+			userBookID = created.ID
 		}
-		if userBookID != "" {
-			input := userbooks.UpdateInput{}
-			if seriesID != "" {
-				seriesIDCopy := seriesID
-				input.SeriesID = &seriesIDCopy
-			}
-			if seriesGuess.VolumeNumber > 0 {
-				volume := seriesGuess.VolumeNumber
-				input.VolumeNumber = &volume
-			}
-			source := "auto"
-			input.SeriesSource = &source
-			if input.SeriesID != nil || input.VolumeNumber != nil {
-				_, _ = h.userBooks.Update(userBookID, input)
-			}
+	}
+	if userBookID != "" && (seriesID != "" || seriesGuess.VolumeNumber > 0) {
+		input := userbooks.UpdateInput{}
+		if seriesID != "" {
+			seriesIDCopy := seriesID
+			input.SeriesID = &seriesIDCopy
+		}
+		if seriesGuess.VolumeNumber > 0 {
+			volume := seriesGuess.VolumeNumber
+			input.VolumeNumber = &volume
+		}
+		source := "auto"
+		input.SeriesSource = &source
+		if input.SeriesID != nil || input.VolumeNumber != nil {
+			_, _ = h.userBooks.Update(userBookID, input)
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -302,7 +302,9 @@ func (h *Handler) Books(w http.ResponseWriter, r *http.Request) {
 		if cleaned := isbn.NormalizeTitle(title); cleaned != "" {
 			title = cleaned
 		}
+		userID := userIDFromRequest(r)
 		book, err := h.books.Create(domain.Book{
+			UserID:        userID,
 			ISBN13:        isbn13,
 			Title:         title,
 			Authors:       req.Authors,
@@ -320,33 +322,31 @@ func (h *Handler) Books(w http.ResponseWriter, r *http.Request) {
 			internalError(w)
 			return
 		}
-		if req.IsSeries && seriesName != "" {
-			userID := userIDFromRequest(r)
+		// ユーザーの蔵書に追加
+		userBookID := ""
+		if created, err := h.userBooks.Create(userID, book.ID, "", ""); err == nil {
+			userBookID = created.ID
+		}
+		if req.IsSeries && seriesName != "" && userBookID != "" {
 			seriesID := ""
 			if item, err := h.series.Ensure(seriesName); err == nil {
 				seriesID = item.ID
 			}
-			userBookID := ""
-			if created, err := h.userBooks.Create(userID, book.ID, "", ""); err == nil {
-				userBookID = created.ID
+			input := userbooks.UpdateInput{}
+			if seriesID != "" {
+				seriesIDCopy := seriesID
+				input.SeriesID = &seriesIDCopy
 			}
-			if userBookID != "" {
-				input := userbooks.UpdateInput{}
-				if seriesID != "" {
-					seriesIDCopy := seriesID
-					input.SeriesID = &seriesIDCopy
-				}
-				if req.VolumeNumber != nil {
-					volume := *req.VolumeNumber
-					input.VolumeNumber = &volume
-				}
-				if seriesID != "" {
-					source := "manual"
-					input.SeriesSource = &source
-				}
-				if input.SeriesID != nil || input.VolumeNumber != nil {
-					_, _ = h.userBooks.Update(userBookID, input)
-				}
+			if req.VolumeNumber != nil {
+				volume := *req.VolumeNumber
+				input.VolumeNumber = &volume
+			}
+			if seriesID != "" {
+				source := "manual"
+				input.SeriesSource = &source
+			}
+			if input.SeriesID != nil || input.VolumeNumber != nil {
+				_, _ = h.userBooks.Update(userBookID, input)
 			}
 		}
 		writeJSON(w, http.StatusOK, book)

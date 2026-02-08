@@ -26,6 +26,7 @@ func (r *BookRepository) Create(book domain.Book) error {
 	}
 	model := Book{
 		ID:            book.ID,
+		UserID:        book.UserID,
 		ISBN13:        isbnPtr,
 		Title:         book.Title,
 		OriginalTitle: book.OriginalTitle,
@@ -92,6 +93,7 @@ func (r *BookRepository) Update(book domain.Book) bool {
 	}
 	model := Book{
 		ID:            book.ID,
+		UserID:        book.UserID,
 		ISBN13:        isbnPtr,
 		Title:         book.Title,
 		OriginalTitle: book.OriginalTitle,
@@ -115,6 +117,7 @@ func modelToDomainBook(model Book) domain.Book {
 	}
 	return domain.Book{
 		ID:            model.ID,
+		UserID:        model.UserID,
 		ISBN13:        isbn,
 		Title:         model.Title,
 		OriginalTitle: model.OriginalTitle,
