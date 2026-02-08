@@ -284,7 +284,18 @@ func (h *Handler) IsbnLookup(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Books(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		items := h.books.List()
+		userID := userIDFromRequest(r)
+		userItems := h.userBooks.ListByUser(userID)
+		bookIDs := make([]string, 0, len(userItems))
+		for _, item := range userItems {
+			bookIDs = append(bookIDs, item.BookID)
+		}
+		items := h.books.ListByIDs(bookIDs)
+		if len(items) == 0 {
+			items = h.books.ListByUser(userID)
+		} else {
+			items = mergeBooksByID(items, h.books.ListByUser(userID))
+		}
 		writeJSON(w, http.StatusOK, map[string]any{
 			"items": items,
 		})
@@ -384,10 +395,6 @@ func (h *Handler) BooksOverview(w http.ResponseWriter, r *http.Request) {
 	wg.Add(4)
 	go func() {
 		defer wg.Done()
-		books = h.books.List()
-	}()
-	go func() {
-		defer wg.Done()
 		userBooks = h.userBooks.ListByUser(userID)
 	}()
 	go func() {
@@ -398,7 +405,21 @@ func (h *Handler) BooksOverview(w http.ResponseWriter, r *http.Request) {
 		defer wg.Done()
 		favorites = h.favorites.ListByUser(userID)
 	}()
+	go func() {
+		defer wg.Done()
+		books = nil
+	}()
 	wg.Wait()
+	bookIDs := make([]string, 0, len(userBooks))
+	for _, item := range userBooks {
+		bookIDs = append(bookIDs, item.BookID)
+	}
+	books = h.books.ListByIDs(bookIDs)
+	if len(books) == 0 {
+		books = h.books.ListByUser(userID)
+	} else {
+		books = mergeBooksByID(books, h.books.ListByUser(userID))
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"books":     books,
 		"userBooks": userBooks,
@@ -423,6 +444,18 @@ func (h *Handler) BookDetailData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userID := userIDFromRequest(r)
+	userItems := h.userBooks.ListByUser(userID)
+	allowed := false
+	for _, item := range userItems {
+		if item.BookID == bookID {
+			allowed = true
+			break
+		}
+	}
+	if !allowed && book.UserID != userID {
+		notFound(w)
+		return
+	}
 	var (
 		userBooks []domain.UserBook
 		favorites []domain.Favorite
@@ -468,6 +501,18 @@ func (h *Handler) BookEditData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userID := userIDFromRequest(r)
+	userItems := h.userBooks.ListByUser(userID)
+	allowed := false
+	for _, item := range userItems {
+		if item.BookID == bookID {
+			allowed = true
+			break
+		}
+	}
+	if !allowed && book.UserID != userID {
+		notFound(w)
+		return
+	}
 	var (
 		userBooks []domain.UserBook
 		series    []domain.Series
@@ -522,7 +567,7 @@ func (h *Handler) SeriesDetail(w http.ResponseWriter, r *http.Request) {
 	}()
 	go func() {
 		defer wg.Done()
-		books = h.books.List()
+		books = nil
 	}()
 	go func() {
 		defer wg.Done()
@@ -533,6 +578,16 @@ func (h *Handler) SeriesDetail(w http.ResponseWriter, r *http.Request) {
 		favorites = h.favorites.ListByUser(userID)
 	}()
 	wg.Wait()
+	bookIDs := make([]string, 0, len(userBooks))
+	for _, item := range userBooks {
+		bookIDs = append(bookIDs, item.BookID)
+	}
+	books = h.books.ListByIDs(bookIDs)
+	if len(books) == 0 {
+		books = h.books.ListByUser(userID)
+	} else {
+		books = mergeBooksByID(books, h.books.ListByUser(userID))
+	}
 	filtered := make([]domain.UserBook, 0, len(userBooks))
 	for _, item := range userBooks {
 		if item.SeriesID == seriesID {
@@ -585,6 +640,19 @@ func (h *Handler) BookByID(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		if id, ok := pathID("/books/", r.URL.Path); ok {
 			if book, found := h.books.Get(id); found {
+				userID := userIDFromRequest(r)
+				userItems := h.userBooks.ListByUser(userID)
+				allowed := false
+				for _, item := range userItems {
+					if item.BookID == id {
+						allowed = true
+						break
+					}
+				}
+				if !allowed && book.UserID != userID {
+					notFound(w)
+					return
+				}
 				writeJSON(w, http.StatusOK, book)
 				return
 			}
@@ -628,7 +696,7 @@ func (h *Handler) UserBooks(w http.ResponseWriter, r *http.Request) {
 			}()
 			go func() {
 				defer wg.Done()
-				books = h.books.List()
+				books = h.books.ListByUser(userID)
 			}()
 			wg.Wait()
 		} else {
@@ -1245,7 +1313,7 @@ func (h *Handler) UserDashboard(w http.ResponseWriter, r *http.Request) {
 	}()
 	go func() {
 		defer wg.Done()
-		books = h.books.List()
+		books = h.books.ListByUser(userID)
 	}()
 	go func() {
 		defer wg.Done()
@@ -1918,6 +1986,35 @@ func normalizeISBN13(value string) string {
 		}
 	}
 	return builder.String()
+}
+
+func mergeBooksByID(primary []domain.Book, extra []domain.Book) []domain.Book {
+	if len(extra) == 0 {
+		return primary
+	}
+	seen := make(map[string]struct{}, len(primary)+len(extra))
+	merged := make([]domain.Book, 0, len(primary)+len(extra))
+	for _, book := range primary {
+		if book.ID == "" {
+			continue
+		}
+		if _, ok := seen[book.ID]; ok {
+			continue
+		}
+		seen[book.ID] = struct{}{}
+		merged = append(merged, book)
+	}
+	for _, book := range extra {
+		if book.ID == "" {
+			continue
+		}
+		if _, ok := seen[book.ID]; ok {
+			continue
+		}
+		seen[book.ID] = struct{}{}
+		merged = append(merged, book)
+	}
+	return merged
 }
 
 func isISODate(value string) bool {

@@ -47,6 +47,11 @@ type BooksPageData = {
 let cachedBooksPageData: BooksPageData | null = null;
 let cachedBooksPagePromise: Promise<BooksPageData> | null = null;
 
+function resetBooksCache() {
+  cachedBooksPageData = null;
+  cachedBooksPagePromise = null;
+}
+
 export default function BooksPage() {
   const [items, setItems] = useState<Book[]>([]);
   const [userBooks, setUserBooks] = useState<UserBook[]>([]);
@@ -55,6 +60,10 @@ export default function BooksPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
+    const handleAuthChanged = () => {
+      resetBooksCache();
+    };
+    window.addEventListener("auth-changed", handleAuthChanged);
     let isMounted = true;
     const load = async () => {
       try {
@@ -92,6 +101,7 @@ export default function BooksPage() {
     };
     load();
     return () => {
+      window.removeEventListener("auth-changed", handleAuthChanged);
       isMounted = false;
     };
   }, []);

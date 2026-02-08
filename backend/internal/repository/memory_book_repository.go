@@ -69,6 +69,42 @@ func (r *MemoryBookRepository) List() []domain.Book {
 	return books
 }
 
+func (r *MemoryBookRepository) ListByUser(userID string) []domain.Book {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	books := make([]domain.Book, 0)
+	for _, id := range r.ordered {
+		if book, ok := r.byID[id]; ok && book.UserID == userID {
+			books = append(books, book)
+		}
+	}
+	return books
+}
+
+func (r *MemoryBookRepository) ListByIDs(ids []string) []domain.Book {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if len(ids) == 0 {
+		return []domain.Book{}
+	}
+	allowed := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		allowed[id] = struct{}{}
+	}
+	books := make([]domain.Book, 0, len(ids))
+	for _, id := range r.ordered {
+		if _, ok := allowed[id]; !ok {
+			continue
+		}
+		if book, ok := r.byID[id]; ok {
+			books = append(books, book)
+		}
+	}
+	return books
+}
+
 func (r *MemoryBookRepository) Delete(id string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()

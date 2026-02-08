@@ -38,7 +38,16 @@ export function updateAuthState(patch: Partial<AuthState>) {
   if (!current) {
     return;
   }
-  setAuthState({ ...current, ...patch });
+  const next = { ...current, ...patch };
+  if (
+    next.accessToken === current.accessToken &&
+    next.refreshToken === current.refreshToken &&
+    next.userId === current.userId &&
+    next.displayName === current.displayName
+  ) {
+    return;
+  }
+  setAuthState(next);
 }
 
 export function clearAuthState() {

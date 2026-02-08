@@ -39,6 +39,14 @@ func (s *Service) List() []domain.Book {
 	return s.books.List()
 }
 
+func (s *Service) ListByUser(userID string) []domain.Book {
+	return s.books.ListByUser(userID)
+}
+
+func (s *Service) ListByIDs(ids []string) []domain.Book {
+	return s.books.ListByIDs(ids)
+}
+
 func (s *Service) Get(id string) (domain.Book, bool) {
 	return s.books.FindByID(id)
 }
