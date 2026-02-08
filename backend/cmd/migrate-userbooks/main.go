@@ -146,7 +146,29 @@ func cleanupDataTables(dbConn *gorm.DB) {
 }
 
 func deleteFromTables(dbConn *gorm.DB, tables []string) {
+	// WARNING: Building SQL with fmt.Sprintf is generally unsafe and can lead to SQL injection.
+	// This is intentionally limited to a hard-coded allowlist for one-off maintenance tasks.
+	// Do NOT copy this pattern into request-handling code.
+	allowedTables := map[string]struct{}{
+		"recommendations":   {},
+		"favorites":         {},
+		"next_to_buy_manuals": {},
+		"user_books":        {},
+		"books":             {},
+		"series":            {},
+		"audit_logs":        {},
+		"admin_invitations": {},
+		"admin_users":       {},
+		"profile_settings":  {},
+		"open_ai_keys":      {},
+		"isbn_caches":       {},
+		"users":             {},
+	}
 	for _, table := range tables {
+		if _, ok := allowedTables[table]; !ok {
+			log.Printf("  %s: skipped (not in allowlist)", table)
+			continue
+		}
 		result := dbConn.Exec(fmt.Sprintf("DELETE FROM %s", table))
 		if result.Error != nil {
 			log.Printf("  %s: error: %v", table, result.Error)
