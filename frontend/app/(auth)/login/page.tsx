@@ -6,6 +6,7 @@ import { useState } from "react";
 
 import { fetchJSON } from "@/lib/api";
 import { setAuthState, updateAuthState } from "@/lib/auth";
+import { loginErrorMessages } from "@/lib/errorMessages";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -48,8 +49,9 @@ export default function LoginPage() {
       } else {
         router.push("/verify-email");
       }
-    } catch {
-      setError("ログインに失敗しました。");
+    } catch (err) {
+      const message = err instanceof Error ? err.message.trim() : "";
+      setError(loginErrorMessages[message] || "ログインに失敗しました。");
     } finally {
       setIsSubmitting(false);
     }

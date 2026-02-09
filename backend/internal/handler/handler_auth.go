@@ -136,11 +136,11 @@ func (h *Handler) AuthLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Email == "" || req.Password == "" {
-		badRequest(w, "email and password are required")
+		badRequest(w, "email_password_required")
 		return
 	}
 	if !validation.IsValidEmail(req.Email) {
-		badRequest(w, "email is invalid")
+		badRequest(w, "invalid_email")
 		return
 	}
 	if h.firebaseClient == nil {
@@ -149,8 +149,12 @@ func (h *Handler) AuthLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := h.firebaseClient.Login(req.Email, req.Password)
 	if err != nil {
-		if errors.Is(err, firebaseauth.ErrInvalidCredentials) || errors.Is(err, firebaseauth.ErrEmailNotFound) {
-			unauthorized(w)
+		if errors.Is(err, firebaseauth.ErrEmailNotFound) {
+			unauthorizedWithMessage(w, "email_not_found")
+			return
+		}
+		if errors.Is(err, firebaseauth.ErrInvalidCredentials) {
+			unauthorizedWithMessage(w, "invalid_password")
 			return
 		}
 		internalError(w)
