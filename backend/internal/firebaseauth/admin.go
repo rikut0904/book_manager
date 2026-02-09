@@ -28,11 +28,11 @@ type AdminCredentials struct {
 func NewAdminClient(ctx context.Context, creds AdminCredentials) (*AdminClient, error) {
 	privateKey := normalizePrivateKey(creds.PrivateKey)
 	credentialsJSON, err := json.Marshal(map[string]string{
-		"type":          "service_account",
-		"project_id":    creds.ProjectID,
-		"client_email":  creds.ClientEmail,
-		"private_key":   privateKey,
-		"token_uri":     "https://oauth2.googleapis.com/token",
+		"type":         "service_account",
+		"project_id":   creds.ProjectID,
+		"client_email": creds.ClientEmail,
+		"private_key":  privateKey,
+		"token_uri":    "https://oauth2.googleapis.com/token",
 	})
 	if err != nil {
 		return nil, err
@@ -73,6 +73,8 @@ func (c *AdminClient) DeleteUser(ctx context.Context, uid string) error {
 // 2. リテラル \n を含む秘密鍵（後方互換性）
 // 3. 実際の改行を含む秘密鍵
 func normalizePrivateKey(key string) string {
+	key = strings.TrimSpace(key)
+	key = strings.Trim(key, "\"")
 	key = strings.TrimSpace(key)
 
 	// リテラル \n を含む場合（後方互換性）- 最初にチェック
