@@ -149,6 +149,7 @@ func (h *Handler) AuthLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := h.firebaseClient.Login(req.Email, req.Password)
 	if err != nil {
+		log.Printf("auth login error for email=%s: %v", req.Email, err)
 		if errors.Is(err, firebaseauth.ErrEmailNotFound) {
 			unauthorizedWithMessage(w, "email_not_found")
 			return
