@@ -48,6 +48,13 @@ func unauthorized(w http.ResponseWriter) {
 	})
 }
 
+func unauthorizedWithMessage(w http.ResponseWriter, message string) {
+	writeJSON(w, http.StatusUnauthorized, map[string]string{
+		"error":   "unauthorized",
+		"message": message,
+	})
+}
+
 func Unauthorized(w http.ResponseWriter) {
 	unauthorized(w)
 }
