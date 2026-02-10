@@ -200,6 +200,8 @@ func decodeFirebaseError(resp *http.Response) error {
 		return ErrInvalidCredentials
 	case "INVALID_PASSWORD":
 		return ErrInvalidCredentials
+	case "INVALID_LOGIN_CREDENTIALS":
+		return ErrInvalidCredentials
 	case "EMAIL_NOT_FOUND":
 		return ErrEmailNotFound
 	case "USER_DISABLED":
